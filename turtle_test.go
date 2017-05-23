@@ -117,7 +117,7 @@ func testUnmarshal(b []byte) (val Value, err error) {
 		return
 	}
 
-	val = ts
+	val = &ts
 	return
 }
 
