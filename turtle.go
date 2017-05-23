@@ -116,8 +116,8 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 			if err = txn.Put([]byte(key), b); err != nil {
 				// Errors on put are something we need to immediately yield for.
 				// The only possible errors we would encounter are:
-				//		1. Disk issues
-				//		2. Middleware issues
+				// 	1. Disk issues
+				// 	2. Middleware issues
 				// Both of which would occur for every subsequent item
 				return
 			}
