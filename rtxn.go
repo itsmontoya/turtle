@@ -17,11 +17,13 @@ func (r *RTxn) Get(key string) (Value, error) {
 
 // Put will put a value for a provided key
 func (r *RTxn) Put(key string, value Value) error {
+	// Cannot perform PUT actions during a read transaction
 	return ErrNotWriteTxn
 }
 
 // Delete will delete a key
 func (r *RTxn) Delete(key string) error {
+	// Cannot perform PUT actions during a read transaction
 	return ErrNotWriteTxn
 }
 
