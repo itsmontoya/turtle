@@ -80,12 +80,41 @@ func (t *Turtle) load() (err error) {
 	return ierr
 }
 
+func (t *Turtle) snapshot() (errs *errors.ErrorList) {
+	t.mux.RLock()
+	defer t.mux.RUnlock()
+
+	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
+		for key, value := range t.s {
+			var b []byte
+			if b, err = t.mfn(value); err != nil {
+				errs.Push(err)
+				err = nil
+				// We don't necessarily need to stop the world for marshal errors, add to errors list and move on
+				continue
+			}
+
+			if err = txn.Put([]byte(key), b); err != nil {
+				return
+			}
+		}
+
+		return
+	}))
+
+	return
+}
+
 func (t *Turtle) Read(fn TxnFn) (err error) {
 	var txn RTxn
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer read-lock release
 	defer t.mux.RUnlock()
+	if t.isClosed() {
+		return errors.ErrIsClosed
+	}
+
 	// Assign store to txn's store field
 	txn.s = t.s
 	// Defer txn clear
@@ -101,6 +130,10 @@ func (t *Turtle) Update(fn TxnFn) (err error) {
 	t.mux.Lock()
 	// Defer write-lock release
 	defer t.mux.Unlock()
+	if t.isClosed() {
+		return errors.ErrIsClosed
+	}
+
 	// Assign store to txn's store field
 	txn.s = t.s
 	// Create new txnStore
@@ -132,29 +165,4 @@ func (t *Turtle) Close() (err error) {
 	errs.Push(t.snapshot())
 	errs.Push(t.mrT.Close())
 	return errs.Err()
-}
-
-func (t *Turtle) snapshot() (errs *errors.ErrorList) {
-	t.mux.RLock()
-	defer t.mux.RUnlock()
-
-	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
-		for key, value := range t.s {
-			var b []byte
-			if b, err = t.mfn(value); err != nil {
-				errs.Push(err)
-				err = nil
-				// We don't necessarily need to stop the world for marshal errors, add to errors list and move on
-				continue
-			}
-
-			if err = txn.Put([]byte(key), b); err != nil {
-				return
-			}
-		}
-
-		return
-	}))
-
-	return
 }
