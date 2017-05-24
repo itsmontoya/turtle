@@ -8,11 +8,11 @@ import (
 
 func TestMain(t *testing.T) {
 	var (
-		tdb *Turtle
+		tdb *turtle
 		err error
 	)
 
-	if tdb, err = New("test", "./data", testMarshal, testUnmarshal); err != nil {
+	if tdb, err = newTurtle("test", "./data", testMarshal, testUnmarshal); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,7 +64,7 @@ func TestMain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if tdb, err = New("test", "./data", testMarshal, testUnmarshal); err != nil {
+	if tdb, err = newTurtle("test", "./data", testMarshal, testUnmarshal); err != nil {
 		t.Fatal(err)
 	}
 
