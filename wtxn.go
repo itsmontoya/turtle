@@ -32,6 +32,8 @@ func (w *WTxn) put(txn *mrT.Txn, key string, value Value) (err error) {
 	if err = txn.Put([]byte(key), b); err != nil {
 		return
 	}
+
+	return
 }
 
 // delete is a QoL func to log a delete action
