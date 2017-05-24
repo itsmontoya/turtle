@@ -1,5 +1,8 @@
 package turtle
 
+//go:generate genny -in=$HOME/go/src/github.com/itsmontoya/turtle/* -out=types/test/* gen "Value=*testStruct"
+//go:generate genny -in=$HOME/go/src/github.com/itsmontoya/turtle/* -out=types/bytes/* gen "Value=[]byte"
+
 import (
 	"sync"
 	"sync/atomic"
