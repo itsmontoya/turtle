@@ -1,8 +1,5 @@
 package turtle
 
-//go:generate genny -in=$HOME/go/src/github.com/itsmontoya/turtle/* -out=types/test/* gen "Value=*testStruct"
-//go:generate genny -in=$HOME/go/src/github.com/itsmontoya/turtle/* -out=types/bytes/* gen "Value=[]byte"
-
 import (
 	"sync"
 	"sync/atomic"
@@ -22,9 +19,9 @@ const (
 // Value is the value type
 type Value generic.Type
 
-// New will return a new instance of Turtle
-func New(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *Turtle, err error) {
-	var t Turtle
+// newTurtle will return a new instance of turtle
+func newTurtle(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *turtle, err error) {
+	var t turtle
 	if t.mrT, err = mrT.New(path, name); err != nil {
 		return
 	}
@@ -41,8 +38,8 @@ func New(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *Turtle, err err
 	return
 }
 
-// Turtle is a DB, he's not a slow fella - I promise!
-type Turtle struct {
+// turtle is a DB, he's not a slow fella - I promise!
+type turtle struct {
 	// Read/Write mutex
 	mux sync.RWMutex
 	// Back-end persistence
@@ -58,12 +55,12 @@ type Turtle struct {
 }
 
 // isClosed will atomically check the closed state of the database
-func (t *Turtle) isClosed() bool {
+func (t *turtle) isClosed() bool {
 	return atomic.LoadUint32(&t.closed) == 1
 }
 
 // load is called on DB initialization and will populate the in-memory store from our file back-end
-func (t *Turtle) load() (err error) {
+func (t *turtle) load() (err error) {
 	// Inner error, this is intended so that the error returned by ForEach
 	// does not overwrite a true error we encounter during iteration.
 	// To explain further - if ForEach returns a nil error, yet we encountered
@@ -96,7 +93,7 @@ func (t *Turtle) load() (err error) {
 	return ierr
 }
 
-func (t *Turtle) snapshot() (errs *errors.ErrorList) {
+func (t *turtle) snapshot() (errs *errors.ErrorList) {
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer release of read-lock
@@ -132,7 +129,7 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 	return
 }
 
-func (t *Turtle) Read(fn TxnFn) (err error) {
+func (t *turtle) Read(fn TxnFn) (err error) {
 	var txn RTxn
 	// Acquire read-lock
 	t.mux.RLock()
@@ -154,7 +151,7 @@ func (t *Turtle) Read(fn TxnFn) (err error) {
 }
 
 // Update will create an update transaction
-func (t *Turtle) Update(fn TxnFn) (err error) {
+func (t *turtle) Update(fn TxnFn) (err error) {
 	var txn WTxn
 	// Acquire write-lock
 	t.mux.Lock()
@@ -189,7 +186,7 @@ func (t *Turtle) Update(fn TxnFn) (err error) {
 }
 
 // Close will close turtle
-func (t *Turtle) Close() (err error) {
+func (t *turtle) Close() (err error) {
 	if !atomic.CompareAndSwapUint32(&t.closed, 0, 1) {
 		// DB is already closed, return with error
 		return errors.ErrIsClosed
