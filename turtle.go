@@ -19,9 +19,9 @@ const (
 // Value is the value type
 type Value generic.Type
 
-// newTurtle will return a new instance of turtle
-func newTurtle(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *turtle, err error) {
-	var t turtle
+// New will return a new instance of Turtle
+func New(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *Turtle, err error) {
+	var t Turtle
 	if t.mrT, err = mrT.New(path, name); err != nil {
 		return
 	}
@@ -38,8 +38,8 @@ func newTurtle(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *turtle, e
 	return
 }
 
-// turtle is a DB, he's not a slow fella - I promise!
-type turtle struct {
+// Turtle is a DB, he's not a slow fella - I promise!
+type Turtle struct {
 	// Read/Write mutex
 	mux sync.RWMutex
 	// Back-end persistence
@@ -55,12 +55,12 @@ type turtle struct {
 }
 
 // isClosed will atomically check the closed state of the database
-func (t *turtle) isClosed() bool {
+func (t *Turtle) isClosed() bool {
 	return atomic.LoadUint32(&t.closed) == 1
 }
 
 // load is called on DB initialization and will populate the in-memory store from our file back-end
-func (t *turtle) load() (err error) {
+func (t *Turtle) load() (err error) {
 	// Inner error, this is intended so that the error returned by ForEach
 	// does not overwrite a true error we encounter during iteration.
 	// To explain further - if ForEach returns a nil error, yet we encountered
@@ -93,7 +93,7 @@ func (t *turtle) load() (err error) {
 	return ierr
 }
 
-func (t *turtle) snapshot() (errs *errors.ErrorList) {
+func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer release of read-lock
@@ -129,7 +129,7 @@ func (t *turtle) snapshot() (errs *errors.ErrorList) {
 	return
 }
 
-func (t *turtle) Read(fn TxnFn) (err error) {
+func (t *Turtle) Read(fn TxnFn) (err error) {
 	var txn RTxn
 	// Acquire read-lock
 	t.mux.RLock()
@@ -151,7 +151,7 @@ func (t *turtle) Read(fn TxnFn) (err error) {
 }
 
 // Update will create an update transaction
-func (t *turtle) Update(fn TxnFn) (err error) {
+func (t *Turtle) Update(fn TxnFn) (err error) {
 	var txn WTxn
 	// Acquire write-lock
 	t.mux.Lock()
@@ -185,8 +185,8 @@ func (t *turtle) Update(fn TxnFn) (err error) {
 	return
 }
 
-// Close will close turtle
-func (t *turtle) Close() (err error) {
+// Close will close Turtle
+func (t *Turtle) Close() (err error) {
 	if !atomic.CompareAndSwapUint32(&t.closed, 0, 1) {
 		// DB is already closed, return with error
 		return errors.ErrIsClosed
