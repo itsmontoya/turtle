@@ -26,7 +26,7 @@ func New(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *Turtle, err err
 		return
 	}
 
-	t.s = make(store)
+	t.b = make(buckets)
 	t.mfn = mfn
 	t.ufn = ufn
 
@@ -44,8 +44,8 @@ type Turtle struct {
 	mux sync.RWMutex
 	// Back-end persistence
 	mrT *mrT.MrT
-	// Internal store
-	s store
+
+	b buckets
 
 	mfn MarshalFn
 	ufn UnmarshalFn

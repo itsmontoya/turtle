@@ -1,5 +1,7 @@
 package turtle
 
+type buckets map[string]store
+
 // store is a basic data store
 type store map[string]Value
 
@@ -59,6 +61,18 @@ type action struct {
 type Txn interface {
 	clear()
 
+	// Get bucket by key
+	Get(key string) (Bucket, error)
+	// Create bucket by key
+	Create(key string) error
+	// Delete bucket by key
+	Delete(key string) error
+	// ForEach bucket
+	ForEach(fn ForEachFn) error
+}
+
+// Bucket represents a db bucket
+type Bucket interface {
 	// Get value by key
 	Get(key string) (Value, error)
 	// Put value by key
