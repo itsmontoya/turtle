@@ -1,4 +1,4 @@
-package turtle
+package turtleDB
 
 import (
 	"sync"
@@ -26,7 +26,7 @@ func New(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *Turtle, err err
 		return
 	}
 
-	t.b = make(buckets)
+	t.b = newBuckets()
 	t.mfn = mfn
 	t.ufn = ufn
 
@@ -45,7 +45,7 @@ type Turtle struct {
 	// Back-end persistence
 	mrT *mrT.MrT
 
-	b buckets
+	b *buckets
 
 	mfn MarshalFn
 	ufn UnmarshalFn
@@ -67,20 +67,39 @@ func (t *Turtle) load() (err error) {
 	// an unmarshal error during the loop. The error would be returned as nil.
 	var ierr error
 	if err = t.mrT.ForEach(func(lineType byte, key, value []byte) (end bool) {
-		if lineType == mrT.DeleteLine {
-			// We encountered a delete line, remove the key from the map and return early
-			delete(t.s, string(key))
-			return
+		switch lineType {
+		case mrT.PutLine:
+			bktKey, refKey, err := getKeys(key)
+			if err != nil {
+				return
+			}
+
+			var v Value
+			if v, ierr = t.ufn(value); err != nil {
+				// Error encountered while unmarshaling, return and end the loop early
+				return true
+			}
+
+			bkt := t.b.create(bktKey)
+			// Set the key as our parsed value within the database store
+			bkt.put(refKey, v)
+
+		case mrT.DeleteLine:
+			bktKey, refKey, err := getKeys(key)
+			if err != nil {
+				return
+			}
+
+			bkt, err := t.b.Get(bktKey)
+			if err != nil {
+				return
+			}
+
+			// Remove the value from the bucket
+			bkt.Delete(refKey)
+		case mrT.TransactionLine, mrT.NilLine, mrT.CommentLine:
 		}
 
-		var v Value
-		if v, ierr = t.ufn(value); err != nil {
-			// Error encountered while unmarshaling, return and end the loop early
-			return true
-		}
-
-		// Set the key as our parsed value within the database store
-		t.s[string(key)] = v
 		return
 	}); err != nil {
 		// Error encountered during ForEach, generally a disk or middleware related issue
@@ -101,27 +120,32 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 
 	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
 		// Iterate through all items
-		for key, value := range t.s {
-			var b []byte
-			// Marshal the value as bytes
-			if b, err = t.mfn(value); err != nil {
-				errs.Push(err)
-				err = nil
-				// We don't necessarily need to stop the world for marshal errors,
-				// add to errors list and move on
-				continue
-			}
+		t.b.ForEach(func(bktKey string, bkt Bucket) bool {
+			bkt.ForEach(func(refKey string, val Value) (end bool) {
+				// Marshal the value as bytes
+				b, err := t.mfn(val)
+				if err != nil {
+					errs.Push(err)
+					err = nil
+					// We don't necessarily need to stop the world for marshal errors,
+					// add to errors list and move on
+					return
+				}
 
-			// Put the updated bytes to the back-end
-			if err = txn.Put([]byte(key), b); err != nil {
-				// Errors on put are something we need to immediately yield for.
-				// The only possible errors we would encounter are:
-				// 	1. Disk issues
-				// 	2. Middleware issues
-				// Both of which would occur for every subsequent item
+				// Put the updated bytes to the back-end
+				if err = txn.Put(mergeKeys(bktKey, refKey), b); err != nil {
+					// Errors on put are something we need to immediately yield for.
+					// The only possible errors we would encounter are:
+					// 	1. Disk issues
+					// 	2. Middleware issues
+					// Both of which would occur for every subsequent item
+					return
+				}
 				return
-			}
-		}
+			})
+
+			return false
+		})
 
 		return
 	}))
@@ -130,7 +154,7 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 }
 
 func (t *Turtle) Read(fn TxnFn) (err error) {
-	var txn RTxn
+	var txn rTxn
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer release of read-lock
@@ -142,7 +166,8 @@ func (t *Turtle) Read(fn TxnFn) (err error) {
 	}
 
 	// Assign buckets to txn's buckets field
-	txn.b = t.b
+	txn.buckets = t.b
+
 	// Defer txn clear
 	defer txn.clear()
 
@@ -152,7 +177,7 @@ func (t *Turtle) Read(fn TxnFn) (err error) {
 
 // Update will create an update transaction
 func (t *Turtle) Update(fn TxnFn) (err error) {
-	var txn WTxn
+	var txn wTxn
 	// Acquire write-lock
 	t.mux.Lock()
 	// Defer release of write-lock
@@ -163,10 +188,10 @@ func (t *Turtle) Update(fn TxnFn) (err error) {
 		return errors.ErrIsClosed
 	}
 
-	// Assign store to txn's store field
-	txn.s = t.s
+	// Assign bucket to transactions bucket field
+	txn.b = t.b
 	// Create new txnStore
-	txn.ts = make(txnStore)
+	txn.tb = newTxnBuckets(t.b)
 	// Set marshal func
 	txn.mfn = t.mfn
 	// Defer txn clear
