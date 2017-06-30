@@ -4,19 +4,19 @@ import "github.com/itsmontoya/mrT"
 
 // WTxn is a write transaction
 type WTxn struct {
-	// Original store
-	s store
-	// Transaction store
-	ts txnStore
+	// Original bucket
+	b *bucket
+	// Transaction bucket
+	tb *txnBucket
 	// Marshal func
 	mfn MarshalFn
 }
 
 func (w *WTxn) clear() {
 	// Set store reference to nil
-	w.s = nil
+	w.b = nil
 	// Set transaction store reference to nil
-	w.ts = nil
+	w.tb = nil
 }
 
 // put is a QoL func to log a put action

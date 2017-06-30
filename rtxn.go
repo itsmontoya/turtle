@@ -2,21 +2,26 @@ package turtle
 
 // RTxn is a read transaction
 type RTxn struct {
-	// Original store
-	s store
+	// Original buckets
+	b *buckets
 }
 
 func (r *RTxn) clear() {
-	r.s = nil
+	r.b = nil
 }
 
 // Get will get a value for a provided key
-func (r *RTxn) Get(key string) (Value, error) {
-	return r.s.get(key)
+func (r *RTxn) Get(key string) (Bucket, error) {
+	var ok bool
+	if Value, ok = r.b[key]; !ok {
+		return ErrKeyDoesNotExist
+	}
+
+	return
 }
 
-// Put will put a value for a provided key
-func (r *RTxn) Put(key string, value Value) error {
+// Create will create a bucket for a provided key
+func (r *RTxn) Create(key string, bucket Bucket) error {
 	// Cannot perform PUT actions during a read transaction
 	return ErrNotWriteTxn
 }
@@ -28,9 +33,9 @@ func (r *RTxn) Delete(key string) error {
 }
 
 // ForEach will iterate through all current items
-func (r *RTxn) ForEach(fn ForEachFn) (err error) {
-	for key, value := range r.s {
-		if fn(key, value) {
+func (r *RTxn) ForEach(fn ForEachBucketFn) (err error) {
+	for key, bucket := range r.b {
+		if fn(key, bucket) {
 			// End was called, return early
 			return
 		}

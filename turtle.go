@@ -141,8 +141,8 @@ func (t *Turtle) Read(fn TxnFn) (err error) {
 		return errors.ErrIsClosed
 	}
 
-	// Assign store to txn's store field
-	txn.s = t.s
+	// Assign buckets to txn's buckets field
+	txn.b = t.b
 	// Defer txn clear
 	defer txn.clear()
 
