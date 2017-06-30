@@ -26,6 +26,11 @@ func (t *txnBucket) get(key string) (value Value, err error) {
 
 	if a, ok = t.m[key]; !ok {
 		// No actions were taken for this key during the transaction
+		if t.b == nil {
+			err = ErrKeyDoesNotExist
+			return
+		}
+
 		return t.b.get(key)
 	}
 
@@ -101,6 +106,10 @@ func (t *txnBucket) forEach(fn ForEachFn) {
 		if fn(key, a.value) {
 			return
 		}
+	}
+
+	if t.b == nil {
+		return
 	}
 
 	t.b.ForEach(func(key string, val Value) (end bool) {
