@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cheekybits/genny/generic"
+	"github.com/itsmontoya/middleware"
 	"github.com/itsmontoya/mrT"
 	"github.com/missionMeteora/toolkit/errors"
 )
@@ -22,7 +23,7 @@ type Value generic.Type
 // New will return a new instance of Turtle
 func New(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *Turtle, err error) {
 	var t Turtle
-	if t.mrT, err = mrT.New(path, name); err != nil {
+	if t.mrT, err = mrT.New(path, name, middleware.Base64MW{}); err != nil {
 		return
 	}
 
