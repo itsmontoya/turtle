@@ -42,6 +42,22 @@ func (tb *txnBuckets) Get(key string) (b Bucket, err error) {
 	b, ok = tb.m[key]
 	tb.mux.RUnlock()
 
+	if ok {
+		return
+	}
+
+	tb.mux.Lock()
+	// Check again to ensure the txnBucket wasn't created inbetween locks
+	if b, ok = tb.m[key]; !ok {
+		if bb, err := tb.b.get(key); err == nil {
+			tbkt := newTxnBucket(bb)
+			tb.m[key] = tbkt
+			b = tbkt
+			ok = true
+		}
+	}
+	tb.mux.Unlock()
+
 	if !ok {
 		// No match was found, return error
 		err = ErrKeyDoesNotExist
