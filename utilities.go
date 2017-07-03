@@ -2,6 +2,14 @@ package turtleDB
 
 import (
 	"bytes"
+
+	"github.com/missionMeteora/toolkit/errors"
+)
+
+const (
+	// ErrInvalidKey is returned when an invalid key is encountered
+	// A key must have a bucket AND reference to be valid
+	ErrInvalidKey = errors.Error("key does not have a bucket and reference")
 )
 
 type action struct {
@@ -57,7 +65,7 @@ type UnmarshalFn func([]byte) (Value, error)
 func getKeys(key []byte) (bktKey, refKey string, err error) {
 	spl := bytes.SplitN(key, []byte{':'}, 2)
 	if len(spl) < 2 {
-		// TODO: Error handling here
+		err = ErrInvalidKey
 		return
 	}
 
