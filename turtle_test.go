@@ -151,8 +151,6 @@ func TestMain(t *testing.T) {
 			return fmt.Errorf("invalid age provided, expected %d and received %d", 32, ts.Age)
 		}
 
-		return
-
 		if err = txn.Delete("TEST_BKT"); err != nil {
 			return
 		}
@@ -171,6 +169,22 @@ func TestMain(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
+	if err = tdb.Read(func(txn Txn) (err error) {
+		var bkt Bucket
+		if bkt, err = txn.Get("TEST_BKT"); err != nil {
+			return
+		}
+
+		if _, err = bkt.Get("0"); err == nil {
+			return fmt.Errorf("nil error encountered when error was expected")
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func testMarshal(val Value) (b []byte, err error) {
