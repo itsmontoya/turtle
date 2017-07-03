@@ -1,4 +1,4 @@
-package turtle
+package turtleDB
 
 import (
 	"encoding/json"
@@ -22,7 +22,24 @@ func TestMain(t *testing.T) {
 			Age:  32,
 		}
 
-		return txn.Put("0", ts)
+		var bkt Bucket
+		if bkt, err = txn.Create("TEST_BKT"); err != nil {
+			return
+		}
+
+		if err = bkt.Put("0", ts); err != nil {
+			return
+		}
+
+		if err = bkt.Put("1", ts); err != nil {
+			return
+		}
+
+		if err = bkt.Put("2", ts); err != nil {
+			return
+		}
+
+		return
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -33,12 +50,17 @@ func TestMain(t *testing.T) {
 			Age:  13,
 		}
 
-		if err := txn.Put("0", ts); err == nil {
+		var bkt Bucket
+		if bkt, err = txn.Get("TEST_BKT"); err != nil {
+			return
+		}
+
+		if err := bkt.Put("0", ts); err == nil {
 			return fmt.Errorf("nil error encountered when error was expected")
 		}
 
 		var val Value
-		if val, err = txn.Get("0"); err != nil {
+		if val, err = bkt.Get("0"); err != nil {
 			return
 		}
 
@@ -74,7 +96,12 @@ func TestMain(t *testing.T) {
 			val Value
 		)
 
-		if val, err = txn.Get("0"); err != nil {
+		var bkt Bucket
+		if bkt, err = txn.Get("TEST_BKT"); err != nil {
+			return
+		}
+
+		if val, err = bkt.Get("0"); err != nil {
 			return
 		}
 
@@ -95,6 +122,69 @@ func TestMain(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
+	if err = tdb.Update(func(txn Txn) (err error) {
+		var (
+			ts  *testStruct
+			val Value
+		)
+
+		var bkt Bucket
+		if bkt, err = txn.Get("TEST_BKT"); err != nil {
+			return
+		}
+
+		if val, err = bkt.Get("0"); err != nil {
+			return
+		}
+
+		var ok bool
+		if ts, ok = val.(*testStruct); !ok {
+			return fmt.Errorf("invalid type provided: %v", val)
+		}
+
+		if ts.Name != "John Doe" {
+			return fmt.Errorf("invalid name provided, expected %s and received %s", "John Doe", ts.Name)
+		}
+
+		if ts.Age != 32 {
+			return fmt.Errorf("invalid age provided, expected %d and received %d", 32, ts.Age)
+		}
+
+		if err = txn.Delete("TEST_BKT"); err != nil {
+			return
+		}
+
+		if bkt, err = txn.Get("TEST_BKT"); err != nil {
+			return
+		}
+
+		if _, err = bkt.Get("0"); err == nil {
+			return fmt.Errorf("nil error encountered when error was expected")
+		}
+
+		err = nil
+
+		return
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = tdb.Read(func(txn Txn) (err error) {
+		var bkt Bucket
+		if bkt, err = txn.Get("TEST_BKT"); err != nil {
+			return
+		}
+
+		if _, err = bkt.Get("0"); err == nil {
+			return fmt.Errorf("nil error encountered when error was expected")
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func testMarshal(val Value) (b []byte, err error) {
