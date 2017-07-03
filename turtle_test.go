@@ -3,6 +3,7 @@ package turtleDB
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -16,9 +17,10 @@ func TestMain(t *testing.T) {
 	fm.Put("default", testMarshal, testUnmarshal)
 	fm.Put("1", testMarshal1, testUnmarshal1)
 
-	if tdb, err = New("test", "./data", fm); err != nil {
+	if tdb, err = New("test", "./test_data", fm); err != nil {
 		t.Fatal(err)
 	}
+	defer os.RemoveAll("./test_data")
 
 	if err = tdb.Update(func(txn Txn) (err error) {
 		ts := &testStruct{
@@ -124,7 +126,7 @@ func TestMain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if tdb, err = New("test", "./data", fm); err != nil {
+	if tdb, err = New("test", "./test_data", fm); err != nil {
 		t.Fatal(err)
 	}
 
