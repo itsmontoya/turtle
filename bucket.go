@@ -57,6 +57,10 @@ func (b *bucket) Get(key string) (value Value, err error) {
 }
 
 func (b *bucket) Put(key string, value Value) error {
+	// bucket's are read-only to the user. This is an exposed Put function to
+	// satisfy the Bucket interface. Since client's cannot put directly to a bucket,
+	// we can automatically return ErrNotWriteTxn without doing any lookups
+	// Note: Internal functions use bucket.put for modifications to the bucket
 	return ErrNotWriteTxn
 }
 
