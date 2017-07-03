@@ -15,21 +15,22 @@ const (
 	ErrNotWriteTxn = errors.Error("cannot perform write actions during a read transaction")
 	// ErrKeyDoesNotExist is returned when a key does not exist
 	ErrKeyDoesNotExist = errors.Error("key does not exist")
+	// ErrEmptyKey is returned when an empty key is provided
+	ErrEmptyKey = errors.Error("empty keys are invalid")
 )
 
 // Value is the value type
 type Value generic.Type
 
 // New will return a new instance of Turtle
-func New(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *Turtle, err error) {
+func New(name, path string, fm FuncsMap) (tp *Turtle, err error) {
 	var t Turtle
 	if t.mrT, err = mrT.New(path, name, middleware.Base64MW{}); err != nil {
 		return
 	}
 
 	t.b = newBuckets()
-	t.mfn = mfn
-	t.ufn = ufn
+	t.fm = fm
 
 	if err = t.load(); err != nil {
 		return
@@ -46,10 +47,8 @@ type Turtle struct {
 	// Back-end persistence
 	mrT *mrT.MrT
 
-	b *buckets
-
-	mfn MarshalFn
-	ufn UnmarshalFn
+	b  *buckets
+	fm FuncsMap
 
 	// Closed state
 	closed uint32
@@ -75,8 +74,13 @@ func (t *Turtle) load() (err error) {
 				return
 			}
 
+			var fns *Funcs
+			if fns, ierr = t.fm.Get(bktKey); ierr != nil {
+				return
+			}
+
 			var v Value
-			if v, ierr = t.ufn(value); err != nil {
+			if v, ierr = fns.Unmarshal(value); err != nil {
 				// Error encountered while unmarshaling, return and end the loop early
 				return true
 			}
@@ -122,9 +126,14 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
 		// Iterate through all items
 		t.b.ForEach(func(bktKey string, bkt Bucket) bool {
+			var fns *Funcs
+			if fns, err = t.fm.Get(bktKey); err != nil {
+				return true
+			}
+
 			bkt.ForEach(func(refKey string, val Value) (end bool) {
 				// Marshal the value as bytes
-				b, err := t.mfn(val)
+				b, err := fns.Marshal(val)
 				if err != nil {
 					errs.Push(err)
 					err = nil
@@ -194,7 +203,7 @@ func (t *Turtle) Update(fn TxnFn) (err error) {
 	// Create new txnStore
 	txn.tb = newTxnBuckets(t.b)
 	// Set marshal func
-	txn.mfn = t.mfn
+	txn.fm = t.fm
 	// Defer txn clear
 	defer txn.clear()
 

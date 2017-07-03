@@ -10,6 +10,12 @@ const (
 	// ErrInvalidKey is returned when an invalid key is encountered
 	// A key must have a bucket AND reference to be valid
 	ErrInvalidKey = errors.Error("key does not have a bucket and reference")
+	// ErrInvalidMarshalFunc is returned when a nil marshal function is provided
+	ErrInvalidMarshalFunc = errors.Error("invalid marshal function")
+	// ErrInvalidUnmarshalFunc is returned when a nil unmarshal function is provided
+	ErrInvalidUnmarshalFunc = errors.Error("invalid unmarshal function")
+	// ErrNoFuncsMatch is returned when a Funcs lookup for a bucket key yields no results
+	ErrNoFuncsMatch = errors.Error("no functions match for this key")
 )
 
 type action struct {
@@ -76,4 +82,46 @@ func getKeys(key []byte) (bktKey, refKey string, err error) {
 
 func mergeKeys(bktKey, refKey string) (key []byte) {
 	return []byte(bktKey + ":" + refKey)
+}
+
+// FuncsMap is a map of functions for marshaling and unmarshaling
+type FuncsMap map[string]*Funcs
+
+// Get will get a matching Funcs for a given key
+func (fm FuncsMap) Get(key string) (fns *Funcs, err error) {
+	var ok bool
+	if fns, ok = fm[key]; ok {
+		return
+	}
+
+	if fns, ok = fm["default"]; ok {
+		return
+	}
+
+	err = ErrNoFuncsMatch
+	return
+}
+
+// Put will set a marshal and unmarshal func for a given key
+func (fm FuncsMap) Put(key string, mfn MarshalFn, ufn UnmarshalFn) (err error) {
+	if key == "" {
+		return ErrEmptyKey
+	}
+
+	if mfn == nil {
+		return ErrInvalidMarshalFunc
+	}
+
+	if ufn == nil {
+		return ErrInvalidUnmarshalFunc
+	}
+
+	fm[key] = &Funcs{mfn, ufn}
+	return
+}
+
+// Funcs is a set of functions
+type Funcs struct {
+	Marshal   MarshalFn
+	Unmarshal UnmarshalFn
 }

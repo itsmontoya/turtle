@@ -6,9 +6,7 @@ import "github.com/itsmontoya/mrT"
 type wTxn struct {
 	b  *buckets
 	tb *txnBuckets
-
-	// Marshal func
-	mfn MarshalFn
+	fm FuncsMap
 }
 
 func (w *wTxn) clear() {
@@ -16,18 +14,26 @@ func (w *wTxn) clear() {
 	w.b = nil
 	// Set transaction store reference to nil
 	w.tb = nil
-	// Set the marshal func to nil
-	w.mfn = nil
+	// Set the funcs map to nil
+	w.fm = nil
 }
 
 // put is a QoL func to log a put action
-func (w *wTxn) put(txn *mrT.Txn, key []byte, value Value) (err error) {
+func (w *wTxn) put(txn *mrT.Txn, bktKey, refKey string, value Value) (err error) {
+	var fns *Funcs
+	if fns, err = w.fm.Get(bktKey); err != nil {
+		return
+	}
+
 	var b []byte
 	// Attempt to marshal value as bytes
-	if b, err = w.mfn(value); err != nil {
+	if b, err = fns.Marshal(value); err != nil {
 		// Marshal error encountered, return
 		return
 	}
+
+	// Get merged key
+	key := mergeKeys(bktKey, refKey)
 
 	// Log action to disk
 	if err = txn.Put(key, b); err != nil {
@@ -38,7 +44,10 @@ func (w *wTxn) put(txn *mrT.Txn, key []byte, value Value) (err error) {
 }
 
 // delete is a QoL func to log a delete action
-func (w *wTxn) delete(txn *mrT.Txn, key []byte) error {
+func (w *wTxn) delete(txn *mrT.Txn, bktKey, refKey string) error {
+	// Get merged key
+	key := mergeKeys(bktKey, refKey)
+
 	// Log action to disk
 	return txn.Delete(key)
 }
@@ -47,18 +56,15 @@ func (w *wTxn) delete(txn *mrT.Txn, key []byte) error {
 func (w *wTxn) commit(txn *mrT.Txn) (err error) {
 	for bktKey, bkt := range w.tb.m {
 		for refKey, a := range bkt.m {
-			// Get merged key
-			key := mergeKeys(string(bktKey), string(refKey))
-
 			// If action.put is true, put action
 			// Else, delete action
 			if a.put {
-				if err = w.put(txn, key, a.value); err != nil {
+				if err = w.put(txn, string(bktKey), string(refKey), a.value); err != nil {
 					// Error encountered while logging put, return
 					return
 				}
 			} else {
-				if err = w.delete(txn, key); err != nil {
+				if err = w.delete(txn, string(bktKey), string(refKey)); err != nil {
 					// Error encountered while logging delete, return
 					return
 				}
