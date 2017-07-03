@@ -37,12 +37,9 @@ func (b *bucket) put(key string, value Value) {
 // delete will remove a provided key
 func (b *bucket) delete(key string) (ok bool) {
 	b.mux.Lock()
-	if _, ok = b.m[key]; !ok {
-		// Value does not exist for this key
-		return
+	if _, ok = b.m[key]; ok {
+		delete(b.m, key)
 	}
-
-	delete(b.m, key)
 	b.mux.Unlock()
 	return
 }
