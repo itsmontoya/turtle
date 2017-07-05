@@ -13,8 +13,7 @@ func TestMain(t *testing.T) {
 		err error
 	)
 
-	fm := make(FuncsMap)
-	fm.Put("default", testMarshal, testUnmarshal)
+	fm := NewFuncsMap(testMarshal, testUnmarshal)
 	fm.Put("1", testMarshal1, testUnmarshal1)
 
 	if tdb, err = New("test", "./test_data", fm); err != nil {
