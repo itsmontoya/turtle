@@ -32,17 +32,28 @@ func (tb *txnBuckets) create(key string, rb *bucket) (bkt *txnBucket, created bo
 		created = true
 	}
 
+	bkt.deleted = false
 	return
 }
 
 // Get will get a bucket
 func (tb *txnBuckets) Get(key string) (b Bucket, err error) {
-	var ok bool
+	var (
+		tbkt *txnBucket
+		ok   bool
+	)
 	tb.mux.RLock()
-	b, ok = tb.m[key]
+	tbkt, ok = tb.m[key]
 	tb.mux.RUnlock()
 
 	if ok {
+		if tbkt.deleted {
+			// This bucket was deleted during the txn
+			err = ErrKeyDoesNotExist
+			return
+		}
+
+		b = tbkt
 		return
 	}
 
@@ -92,8 +103,7 @@ func (tb *txnBuckets) Delete(key string) (err error) {
 
 	// Delete the contents of the bucket
 	bkt.deleteAll()
-
-	// TODO: Add actual removal of the bucket, rather than just it's contents
+	bkt.deleted = true
 	return
 }
 

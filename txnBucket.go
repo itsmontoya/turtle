@@ -15,6 +15,8 @@ type txnBucket struct {
 
 	b *bucket
 	m map[string]*action
+
+	deleted bool
 }
 
 // get will retrieve a value for a provided key

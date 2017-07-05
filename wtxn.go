@@ -70,6 +70,13 @@ func (w *wTxn) commit(txn *mrT.Txn) (err error) {
 				}
 			}
 		}
+
+		if bkt.deleted {
+			if err = w.delete(txn, string(bktKey), ""); err != nil {
+				// Error encountered while logging delete, return
+				return
+			}
+		}
 	}
 
 	return
@@ -78,17 +85,24 @@ func (w *wTxn) commit(txn *mrT.Txn) (err error) {
 // merge will merge the transaction store values with the store values
 func (w *wTxn) merge() {
 	for bktKey, bkt := range w.tb.m {
+		if bkt.deleted {
+			// If the bucket was deleted, we don't have to do anything fancy. Just delete and move on
+			w.b.delete(bktKey)
+			continue
+		}
+
 		for refKey, a := range bkt.m {
 			if a.put {
 				w.b.create(bktKey).put(refKey, a.value)
-			} else {
-				bb, err := w.b.get(bktKey)
-				if err != nil {
-					continue
-				}
-
-				bb.delete(refKey)
+				continue
 			}
+
+			bb, err := w.b.get(bktKey)
+			if err != nil {
+				continue
+			}
+
+			bb.delete(refKey)
 		}
 	}
 }

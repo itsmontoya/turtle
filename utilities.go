@@ -141,7 +141,8 @@ func MarshalJSON(val Value) (b []byte, err error) {
 
 // UnmarshalJSON is a basic JSON unmarshaler helper func
 func UnmarshalJSON(b []byte) (val Value, err error) {
-	return json.Unmarshal(b, &val)
+	err = json.Unmarshal(b, &val)
+	return
 }
 
-var jsonFM = NewFuncsMap(MarshalFn, UnmarshalFn)
+var jsonFM = NewFuncsMap(MarshalJSON, UnmarshalJSON)

@@ -194,16 +194,11 @@ func TestMain(t *testing.T) {
 			return
 		}
 
-		if bkt, err = txn.Get("TEST_BKT"); err != nil {
-			return
-		}
-
-		if _, err = bkt.Get("0"); err == nil {
+		if bkt, err = txn.Get("TEST_BKT"); err == nil {
 			return fmt.Errorf("nil error encountered when error was expected")
 		}
 
 		err = nil
-
 		return
 	}); err != nil {
 		t.Fatal(err)
@@ -211,15 +206,13 @@ func TestMain(t *testing.T) {
 
 	if err = tdb.Read(func(txn Txn) (err error) {
 		var bkt Bucket
-		if bkt, err = txn.Get("TEST_BKT"); err != nil {
-			return
-		}
-
-		if _, err = bkt.Get("0"); err == nil {
+		if bkt, err = txn.Get("TEST_BKT"); err == nil {
+			fmt.Println("Oh?", bkt, err)
 			return fmt.Errorf("nil error encountered when error was expected")
 		}
+		err = nil
 
-		return nil
+		return
 	}); err != nil {
 		t.Fatal(err)
 	}

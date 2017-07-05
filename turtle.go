@@ -100,6 +100,12 @@ func (t *Turtle) load() (err error) {
 				return
 			}
 
+			if refKey == "" {
+				// Empty reference key represents the bucket
+				t.b.delete(bktKey)
+				return
+			}
+
 			bkt, err := t.b.Get(bktKey)
 			if err != nil {
 				return
