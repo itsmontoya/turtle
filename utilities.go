@@ -3,6 +3,7 @@ package turtleDB
 import (
 	"bytes"
 
+	"encoding/json"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -84,6 +85,13 @@ func mergeKeys(bktKey, refKey string) (key []byte) {
 	return []byte(bktKey + ":" + refKey)
 }
 
+// NewFuncsMap will create a FuncsMap and set it's default entry as the provided funcs
+func NewFuncsMap(mfn MarshalFn, ufn UnmarshalFn) (fm FuncsMap) {
+	fm = make(FuncsMap)
+	fm.Put("default", mfn, ufn)
+	return fm
+}
+
 // FuncsMap is a map of functions for marshaling and unmarshaling
 type FuncsMap map[string]*Funcs
 
@@ -125,3 +133,15 @@ type Funcs struct {
 	Marshal   MarshalFn
 	Unmarshal UnmarshalFn
 }
+
+// MarshalJSON is a basic JSON marshaler helper func
+func MarshalJSON(val Value) (b []byte, err error) {
+	return json.Marshal(val)
+}
+
+// UnmarshalJSON is a basic JSON unmarshaler helper func
+func UnmarshalJSON(b []byte) (val Value, err error) {
+	return json.Unmarshal(b, &val)
+}
+
+var jsonFM = NewFuncsMap(MarshalFn, UnmarshalFn)
