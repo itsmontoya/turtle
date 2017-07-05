@@ -29,8 +29,13 @@ func New(name, path string, fm FuncsMap) (tp *Turtle, err error) {
 		return
 	}
 
+	if fm == nil {
+		t.fm = jsonFM
+	} else {
+		t.fm = fm
+	}
+
 	t.b = newBuckets()
-	t.fm = fm
 
 	if err = t.load(); err != nil {
 		return
