@@ -2,64 +2,40 @@
 // Any changes will be lost if this file is regenerated.
 // see https://github.com/cheekybits/genny
 
-package bytes
+package turtleDB
 
 import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/itsmontoya/middleware"
 	"github.com/itsmontoya/mrT"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
-type RTxn struct {
-	s store
-}
-
-func (r *RTxn) clear() {
-	r.s = nil
-}
-
-func (r *RTxn) Get(key string) ([]byte, error) {
-	return r.s.get(key)
-}
-
-func (r *RTxn) Put(key string, value []byte) error {
-
-	return ErrNotWriteTxn
-}
-
-func (r *RTxn) Delete(key string) error {
-
-	return ErrNotWriteTxn
-}
-
-func (r *RTxn) ForEach(fn ForEachFn) (err error) {
-	for key, value := range r.s {
-		if fn(key, value) {
-
-			return
-		}
-	}
-
-	return
-}
-
 const (
+	// ErrNotWriteTxn is returned when PUT or DELETE are called during a read txn
 	ErrNotWriteTxn = errors.Error("cannot perform write actions during a read transaction")
-
+	// ErrKeyDoesNotExist is returned when a key does not exist
 	ErrKeyDoesNotExist = errors.Error("key does not exist")
+	// ErrEmptyKey is returned when an empty key is provided
+	ErrEmptyKey = errors.Error("empty keys are invalid")
 )
 
-func newTurtle(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *turtle, err error) {
-	var t turtle
-	if t.mrT, err = mrT.New(path, name); err != nil {
+// New will return a new instance of Turtle
+func New(name, path string, fm FuncsMap) (tp *Turtle, err error) {
+	var t Turtle
+	if t.mrT, err = mrT.New(path, name, middleware.Base64MW{}); err != nil {
 		return
 	}
 
-	t.s = make(store)
-	t.mfn = mfn
-	t.ufn = ufn
+	if fm == nil {
+		t.fm = jsonFM
+	} else {
+		t.fm = fm
+	}
+
+	t.b = newBuckets()
 
 	if err = t.load(); err != nil {
 		return
@@ -69,72 +45,128 @@ func newTurtle(name, path string, mfn MarshalFn, ufn UnmarshalFn) (tp *turtle, e
 	return
 }
 
-type turtle struct {
+// Turtle is a DB, he's not a slow fella - I promise!
+type Turtle struct {
+	// Read/Write mutex
 	mux sync.RWMutex
-
+	// Back-end persistence
 	mrT *mrT.MrT
 
-	s store
+	b  *buckets
+	fm FuncsMap
 
-	mfn MarshalFn
-	ufn UnmarshalFn
-
+	// Closed state
 	closed uint32
 }
 
-func (t *turtle) isClosed() bool {
+// isClosed will atomically check the closed state of the database
+func (t *Turtle) isClosed() bool {
 	return atomic.LoadUint32(&t.closed) == 1
 }
 
-func (t *turtle) load() (err error) {
-
+// load is called on DB initialization and will populate the in-memory store from our file back-end
+func (t *Turtle) load() (err error) {
+	// Inner error, this is intended so that the error returned by ForEach
+	// does not overwrite a true error we encounter during iteration.
+	// To explain further - if ForEach returns a nil error, yet we encountered
+	// an unmarshal error during the loop. The error would be returned as nil.
 	var ierr error
 	if err = t.mrT.ForEach(func(lineType byte, key, value []byte) (end bool) {
-		if lineType == mrT.DeleteLine {
+		switch lineType {
+		case mrT.PutLine:
+			bktKey, refKey, err := getKeys(key)
+			if err != nil {
+				return
+			}
 
-			delete(t.s, string(key))
-			return
+			var fns *Funcs
+			if fns, ierr = t.fm.Get(bktKey); ierr != nil {
+				return
+			}
+
+			var v []byte
+			if v, ierr = fns.Unmarshal(value); err != nil {
+				// Error encountered while unmarshaling, return and end the loop early
+				return true
+			}
+
+			bkt := t.b.create(bktKey)
+			// Set the key as our parsed value within the database store
+			bkt.put(refKey, v)
+
+		case mrT.DeleteLine:
+			bktKey, refKey, err := getKeys(key)
+			if err != nil {
+				return
+			}
+
+			if refKey == "" {
+				// Empty reference key represents the bucket
+				t.b.delete(bktKey)
+				return
+			}
+
+			bkt, err := t.b.Get(bktKey)
+			if err != nil {
+				return
+			}
+
+			// Remove the value from the bucket
+			bkt.Delete(refKey)
+		case mrT.TransactionLine, mrT.NilLine, mrT.CommentLine:
 		}
 
-		var v []byte
-		if v, ierr = t.ufn(value); err != nil {
-
-			return true
-		}
-
-		t.s[string(key)] = v
 		return
 	}); err != nil {
-
+		// Error encountered during ForEach, generally a disk or middleware related issue
+		// Any error which may be encountered SHOULD occur before any iteration occurs
+		// TODO: Do some heavy combing through the codebase to confirm this statement
 		return
 	}
 
+	// Return any inner errors encountered
 	return ierr
 }
 
-func (t *turtle) snapshot() (errs *errors.ErrorList) {
-
+func (t *Turtle) snapshot() (errs *errors.ErrorList) {
+	// Acquire read-lock
 	t.mux.RLock()
-
+	// Defer release of read-lock
 	defer t.mux.RUnlock()
 
 	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
-
-		for key, value := range t.s {
-			var b []byte
-
-			if b, err = t.mfn(value); err != nil {
-				errs.Push(err)
-				err = nil
-
-				continue
+		// Iterate through all items
+		t.b.ForEach(func(bktKey string, bkt Bucket) bool {
+			var fns *Funcs
+			if fns, err = t.fm.Get(bktKey); err != nil {
+				return true
 			}
 
-			if err = txn.Put([]byte(key), b); err != nil {
+			bkt.ForEach(func(refKey string, val []byte) (end bool) {
+				// Marshal the value as bytes
+				b, err := fns.Marshal(val)
+				if err != nil {
+					errs.Push(err)
+					err = nil
+					// We don't necessarily need to stop the world for marshal errors,
+					// add to errors list and move on
+					return
+				}
 
+				// Put the updated bytes to the back-end
+				if err = txn.Put(mergeKeys(bktKey, refKey), b); err != nil {
+					// Errors on put are something we need to immediately yield for.
+					// The only possible errors we would encounter are:
+					// 	1. Disk issues
+					// 	2. Middleware issues
+					// Both of which would occur for every subsequent item
+					return
+				}
 				return
-			}
-		}
+			})
+
+			return false
+		})
 
 		return
 	}))
@@ -142,262 +174,74 @@ func (t *turtle) snapshot() (errs *errors.ErrorList) {
 	return
 }
 
-func (t *turtle) Read(fn TxnFn) (err error) {
-	var txn RTxn
-
+func (t *Turtle) Read(fn TxnFn) (err error) {
+	var txn rTxn
+	// Acquire read-lock
 	t.mux.RLock()
-
+	// Defer release of read-lock
 	defer t.mux.RUnlock()
 
 	if t.isClosed() {
-
+		// DB is closed and we cannot perform any actions, return with error
 		return errors.ErrIsClosed
 	}
 
-	txn.s = t.s
+	// Assign buckets to txn's buckets field
+	txn.buckets = t.b
 
+	// Defer txn clear
 	defer txn.clear()
 
+	// Call provided func
 	return fn(&txn)
 }
 
-func (t *turtle) Update(fn TxnFn) (err error) {
-	var txn WTxn
-
+// Update will create an update transaction
+func (t *Turtle) Update(fn TxnFn) (err error) {
+	var txn wTxn
+	// Acquire write-lock
 	t.mux.Lock()
-
+	// Defer release of write-lock
 	defer t.mux.Unlock()
 
 	if t.isClosed() {
-
+		// DB is closed and we cannot perform any actions, return with error
 		return errors.ErrIsClosed
 	}
 
-	txn.s = t.s
-
-	txn.ts = make(txnStore)
-
-	txn.mfn = t.mfn
-
+	// Assign bucket to transactions bucket field
+	txn.b = t.b
+	// Create new txnStore
+	txn.tb = newTxnBuckets(t.b)
+	// Set marshal func
+	txn.fm = t.fm
+	// Defer txn clear
 	defer txn.clear()
 
+	// Call provided func
 	if err = fn(&txn); err != nil {
 		return
 	}
-
+	// Commit changes
 	if err = t.mrT.Txn(txn.commit); err != nil {
 		return
 	}
-
+	// Merge changes
 	txn.merge()
 	return
 }
 
-func (t *turtle) Close() (err error) {
+// Close will close Turtle
+func (t *Turtle) Close() (err error) {
 	if !atomic.CompareAndSwapUint32(&t.closed, 0, 1) {
-
+		// DB is already closed, return with error
 		return errors.ErrIsClosed
 	}
 
 	var errs errors.ErrorList
-
+	// Attempt to snapshot
 	errs.Push(t.snapshot())
-
+	// Close file back-end
 	errs.Push(t.mrT.Close())
 	return errs.Err()
-}
-
-type store map[string][]byte
-
-func (s store) get(key string) (value []byte, err error) {
-	var ok bool
-	if value, ok = s[key]; !ok {
-
-		err = ErrKeyDoesNotExist
-	}
-
-	return
-}
-
-func (s store) exists(key string) (ok bool) {
-	_, ok = s[key]
-	return
-}
-
-type txnStore map[string]*action
-
-func (t txnStore) get(key string) (value []byte, ok bool, err error) {
-	var a *action
-	if a, ok = t[key]; !ok {
-
-		return
-	}
-
-	if !a.put {
-
-		err = ErrKeyDoesNotExist
-		return
-	}
-
-	value = a.value
-	return
-}
-
-func (t txnStore) exists(key string) (ok bool) {
-	_, ok = t[key]
-	return
-}
-
-type action struct {
-	put bool
-
-	value []byte
-}
-
-type Txn interface {
-	clear()
-
-	Get(key string) ([]byte, error)
-
-	Put(key string, value []byte) error
-
-	Delete(key string) error
-
-	ForEach(fn ForEachFn) error
-}
-
-type ForEachFn func(key string, value []byte) (end bool)
-
-type TxnFn func(txn Txn) error
-
-type MarshalFn func([]byte) ([]byte, error)
-
-type UnmarshalFn func([]byte) ([]byte, error)
-
-type WTxn struct {
-	s store
-
-	ts txnStore
-
-	mfn MarshalFn
-}
-
-func (w *WTxn) clear() {
-
-	w.s = nil
-
-	w.ts = nil
-}
-
-func (w *WTxn) put(txn *mrT.Txn, key string, value []byte) (err error) {
-	var b []byte
-
-	if b, err = w.mfn(value); err != nil {
-
-		return
-	}
-
-	if err = txn.Put([]byte(key), b); err != nil {
-		return
-	}
-
-	return
-}
-
-func (w *WTxn) delete(txn *mrT.Txn, key string) error {
-
-	return txn.Delete([]byte(key))
-}
-
-func (w *WTxn) commit(txn *mrT.Txn) (err error) {
-	for key, action := range w.ts {
-
-		if action.put {
-			if err = w.put(txn, key, action.value); err != nil {
-
-				return
-			}
-		} else {
-			if err = w.delete(txn, key); err != nil {
-
-				return
-			}
-		}
-	}
-
-	return
-}
-
-func (w *WTxn) merge() {
-
-	for key, action := range w.ts {
-		if action.put {
-
-			w.s[key] = action.value
-		} else {
-
-			delete(w.s, key)
-		}
-	}
-}
-
-func (w *WTxn) Get(key string) (value []byte, err error) {
-	var ok bool
-
-	if value, ok, err = w.ts.get(key); ok || err != nil {
-
-		return
-	}
-
-	return w.s.get(key)
-}
-
-func (w *WTxn) Put(key string, value []byte) (err error) {
-	w.ts[key] = &action{
-		put:   true,
-		value: value,
-	}
-
-	return
-}
-
-func (w *WTxn) Delete(key string) (err error) {
-	if !w.s.exists(key) && !w.ts.exists(key) {
-
-		return
-	}
-
-	w.ts[key] = &action{
-		put: false,
-	}
-	return
-}
-
-func (w *WTxn) ForEach(fn ForEachFn) (err error) {
-	var ok bool
-	for key, action := range w.ts {
-		if !action.put {
-
-			continue
-		}
-
-		if fn(key, action.value) {
-
-			return
-		}
-	}
-
-	for key, value := range w.s {
-		if _, ok = w.ts[key]; ok {
-
-			continue
-		}
-
-		if fn(key, value) {
-
-			return
-		}
-	}
-
-	return
 }
