@@ -33,7 +33,9 @@ func (b *buckets) create(key string) (bkt *bucket) {
 	var ok bool
 	b.mux.Lock()
 	if bkt, ok = b.m[key]; !ok {
+		// Bucket does not exist, create new bucket
 		bkt = newBucket()
+		// Assign new bucket to the bucket map
 		b.m[key] = bkt
 	}
 	b.mux.Unlock()
