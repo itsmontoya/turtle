@@ -1,10 +1,16 @@
 package turtleDB
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
+)
+
+var (
+	testVal1 = []byte("value one")
+	testVal2 = []byte("value two")
+	testVal3 = []byte("value three")
 )
 
 func TestMain(t *testing.T) {
@@ -14,7 +20,6 @@ func TestMain(t *testing.T) {
 	)
 
 	fm := NewFuncsMap(testMarshal, testUnmarshal)
-	fm.Put("1", testMarshal1, testUnmarshal1)
 
 	if tdb, err = New("test", "./test_data", fm); err != nil {
 		t.Fatal(err)
@@ -22,102 +27,37 @@ func TestMain(t *testing.T) {
 	defer os.RemoveAll("./test_data")
 
 	if err = tdb.Update(func(txn Txn) (err error) {
-		ts := &testStruct{
-			Name: "John Doe",
-			Age:  32,
-		}
-
-		ts1 := &testStruct1{
-			Name: "John Doe",
-			Age:  32,
-		}
-
 		var bkt Bucket
 		if bkt, err = txn.Create("TEST_BKT"); err != nil {
 			return
 		}
 
-		if err = bkt.Put("0", ts); err != nil {
+		if err = bkt.Put("1", testVal1); err != nil {
 			return
 		}
 
-		if err = bkt.Put("1", ts); err != nil {
+		if err = bkt.Put("2", testVal2); err != nil {
 			return
 		}
 
-		if err = bkt.Put("2", ts); err != nil {
+		if err = bkt.Put("3", testVal3); err != nil {
 			return
 		}
 
-		if bkt, err = txn.Create("1"); err != nil {
+		if bkt, err = txn.Create("TEST_BKT_2"); err != nil {
 			return
 		}
 
-		if err = bkt.Put("0", ts1); err != nil {
+		if err = bkt.Put("3", testVal3); err != nil {
 			return
 		}
 
-		return
+		return testCheckValues(txn)
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err = tdb.Read(func(txn Txn) (err error) {
-		var ts1 *testStruct1
-		ts := &testStruct{
-			Name: "Foo",
-			Age:  13,
-		}
-
-		var bkt Bucket
-		if bkt, err = txn.Get("TEST_BKT"); err != nil {
-			return
-		}
-
-		if err := bkt.Put("0", ts); err == nil {
-			return fmt.Errorf("nil error encountered when error was expected")
-		}
-
-		var val Value
-		if val, err = bkt.Get("0"); err != nil {
-			return
-		}
-
-		var ok bool
-		if ts, ok = val.(*testStruct); !ok {
-			return fmt.Errorf("invalid type provided: %v", val)
-		}
-
-		if ts.Name != "John Doe" {
-			return fmt.Errorf("invalid name provided, expected %s and received %s", "John Doe", ts.Name)
-		}
-
-		if ts.Age != 32 {
-			return fmt.Errorf("invalid age provided, expected %d and received %d", 32, ts.Age)
-		}
-
-		if bkt, err = txn.Get("1"); err != nil {
-			return
-		}
-
-		if val, err = bkt.Get("0"); err != nil {
-			return
-		}
-
-		if ts1, ok = val.(*testStruct1); !ok {
-			return fmt.Errorf("invalid type provided: %v", val)
-		}
-
-		if ts1.Name != "John Doe" {
-			return fmt.Errorf("invalid name provided, expected %s and received %s", "John Doe", ts.Name)
-		}
-
-		if ts1.Age != 32 {
-			return fmt.Errorf("invalid age provided, expected %d and received %d", 32, ts.Age)
-		}
-
-		return
-	}); err != nil {
+	if err = tdb.Read(testReadCheck); err != nil {
 		t.Fatal(err)
 	}
 
@@ -129,72 +69,32 @@ func TestMain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err = tdb.Read(func(txn Txn) (err error) {
-		var (
-			ts  *testStruct
-			val Value
-		)
-
-		var bkt Bucket
-		if bkt, err = txn.Get("TEST_BKT"); err != nil {
-			return
-		}
-
-		if val, err = bkt.Get("0"); err != nil {
-			return
-		}
-
-		var ok bool
-		if ts, ok = val.(*testStruct); !ok {
-			return fmt.Errorf("invalid type provided: %v", val)
-		}
-
-		if ts.Name != "John Doe" {
-			return fmt.Errorf("invalid name provided, expected %s and received %s", "John Doe", ts.Name)
-		}
-
-		if ts.Age != 32 {
-			return fmt.Errorf("invalid age provided, expected %d and received %d", 32, ts.Age)
-		}
-
-		return
-	}); err != nil {
+	if err = tdb.Read(testReadCheck); err != nil {
 		t.Fatal(err)
 	}
 
 	if err = tdb.Update(func(txn Txn) (err error) {
-		var (
-			ts  *testStruct
-			val Value
-		)
-
-		var bkt Bucket
-		if bkt, err = txn.Get("TEST_BKT"); err != nil {
+		if err = testCheckValues(txn); err != nil {
 			return
 		}
 
-		if val, err = bkt.Get("0"); err != nil {
+		if _, err = txn.Get("TEST_BKT"); err != nil {
 			return
-		}
-
-		var ok bool
-		if ts, ok = val.(*testStruct); !ok {
-			return fmt.Errorf("invalid type provided: %v", val)
-		}
-
-		if ts.Name != "John Doe" {
-			return fmt.Errorf("invalid name provided, expected %s and received %s", "John Doe", ts.Name)
-		}
-
-		if ts.Age != 32 {
-			return fmt.Errorf("invalid age provided, expected %d and received %d", 32, ts.Age)
 		}
 
 		if err = txn.Delete("TEST_BKT"); err != nil {
 			return
 		}
 
-		if bkt, err = txn.Get("TEST_BKT"); err == nil {
+		if _, err = txn.Get("TEST_BKT"); err == nil {
+			return fmt.Errorf("nil error encountered when error was expected")
+		}
+
+		if _, err = txn.Create("TEST_BKT"); err != nil {
+			return
+		}
+
+		if err = testCheckValues(txn); err == nil {
 			return fmt.Errorf("nil error encountered when error was expected")
 		}
 
@@ -204,75 +104,90 @@ func TestMain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err = tdb.Read(func(txn Txn) (err error) {
-		var bkt Bucket
-		if bkt, err = txn.Get("TEST_BKT"); err == nil {
-			fmt.Println("Oh?", bkt, err)
-			return fmt.Errorf("nil error encountered when error was expected")
-		}
-		err = nil
-
-		return
-	}); err != nil {
+	if err = tdb.Close(); err != nil {
 		t.Fatal(err)
 	}
-
 }
 
 func testMarshal(val Value) (b []byte, err error) {
-	var (
-		ts *testStruct
-		ok bool
-	)
-
-	if ts, ok = val.(*testStruct); !ok {
-		err = fmt.Errorf("invalid type provided: %v", val)
+	in, ok := val.([]byte)
+	if !ok {
+		err = errors.New("invalid type")
 		return
 	}
 
-	return json.Marshal(ts)
+	b = make([]byte, len(in))
+	copy(b, in)
+	return
 }
 
 func testUnmarshal(b []byte) (val Value, err error) {
-	var ts testStruct
-	if err = json.Unmarshal(b, &ts); err != nil {
-		return
-	}
-
-	val = &ts
+	out := make([]byte, len(b))
+	copy(out, b)
+	val = out
 	return
 }
 
-type testStruct struct {
-	Name string `json:"name"`
-	Age  int    `json:"age"`
+func testReadCheck(txn Txn) (err error) {
+	var bkt Bucket
+	if bkt, err = txn.Get("TEST_BKT"); err != nil {
+		return
+	}
+
+	if err = bkt.Put("1", testVal1); err == nil {
+		return fmt.Errorf("nil error encountered when error was expected")
+	}
+
+	return testCheckValues(txn)
 }
 
-func testMarshal1(val Value) (b []byte, err error) {
+func testCheckValues(txn Txn) (err error) {
+	var bkt Bucket
+	if bkt, err = txn.Get("TEST_BKT"); err != nil {
+		return
+	}
+
+	if err = testCheckValue(bkt, "1", testVal1); err != nil {
+		return
+	}
+
+	if err = testCheckValue(bkt, "2", testVal2); err != nil {
+		return
+	}
+
+	if err = testCheckValue(bkt, "3", testVal3); err != nil {
+		return
+	}
+
+	if bkt, err = txn.Get("TEST_BKT_2"); err != nil {
+		return
+	}
+
+	if err = testCheckValue(bkt, "3", testVal3); err != nil {
+		return
+	}
+
+	return
+}
+
+func testCheckValue(bkt Bucket, key string, ref []byte) (err error) {
 	var (
-		ts *testStruct1
-		ok bool
+		val Value
+		bv  []byte
+		ok  bool
 	)
 
-	if ts, ok = val.(*testStruct1); !ok {
-		err = fmt.Errorf("invalid type provided: %v", val)
+	if val, err = bkt.Get(key); err != nil {
 		return
 	}
 
-	return json.Marshal(ts)
-}
-
-func testUnmarshal1(b []byte) (val Value, err error) {
-	var ts testStruct1
-	if err = json.Unmarshal(b, &ts); err != nil {
-		return
+	if bv, ok = val.([]byte); !ok {
+		return fmt.Errorf("invalid type provided: %v", val)
 	}
 
-	val = &ts
+	if refStr, strVal := string(ref), string(bv); refStr != strVal {
+		return fmt.Errorf("invalid value, expected %s and received %s", refStr, strVal)
+	}
+
 	return
-}
-
-type testStruct1 struct {
-	Name string `json:"name"`
-	Age  int    `json:"age"`
 }
