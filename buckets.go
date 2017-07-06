@@ -13,6 +13,21 @@ type buckets struct {
 	m   map[string]*bucket
 }
 
+// Get will get a bucket
+func (b *buckets) get(key string) (bkt *bucket, err error) {
+	var ok bool
+	b.mux.RLock()
+	bkt, ok = b.m[key]
+	b.mux.RUnlock()
+
+	if !ok {
+		// No match was found, return error
+		err = ErrKeyDoesNotExist
+	}
+
+	return
+}
+
 // create will create a bucket at a given key. This is intended for internal use only
 func (b *buckets) create(key string) (bkt *bucket) {
 	var ok bool
@@ -30,21 +45,6 @@ func (b *buckets) delete(key string) (bkt *bucket) {
 	b.mux.Lock()
 	delete(b.m, key)
 	b.mux.Unlock()
-	return
-}
-
-// Get will get a bucket
-func (b *buckets) get(key string) (bkt *bucket, err error) {
-	var ok bool
-	b.mux.RLock()
-	bkt, ok = b.m[key]
-	b.mux.RUnlock()
-
-	if !ok {
-		// No match was found, return error
-		err = ErrKeyDoesNotExist
-	}
-
 	return
 }
 
