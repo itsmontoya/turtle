@@ -85,7 +85,7 @@ func (t *Turtle) load() (err error) {
 			}
 
 			var v Value
-			if v, ierr = fns.Unmarshal(value); err != nil {
+			if v, ierr = fns.Unmarshal(value); ierr != nil {
 				// Error encountered while unmarshaling, return and end the loop early
 				return true
 			}
@@ -128,12 +128,13 @@ func (t *Turtle) load() (err error) {
 	return ierr
 }
 
-func (t *Turtle) snapshot() (errs *errors.ErrorList) {
+func (t *Turtle) snapshot() *errors.ErrorList {
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer release of read-lock
 	defer t.mux.RUnlock()
 
+	var errs errors.ErrorList
 	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
 		// Iterate through all items
 		t.b.ForEach(func(bktKey string, bkt Bucket) bool {
@@ -171,7 +172,7 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 		return
 	}))
 
-	return
+	return &errs
 }
 
 func (t *Turtle) Read(fn TxnFn) (err error) {
