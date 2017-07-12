@@ -128,13 +128,12 @@ func (t *Turtle) load() (err error) {
 	return ierr
 }
 
-func (t *Turtle) snapshot() *errors.ErrorList {
+func (t *Turtle) snapshot() (errs errors.ErrorList) {
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer release of read-lock
 	defer t.mux.RUnlock()
 
-	var errs errors.ErrorList
 	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
 		// Iterate through all items
 		t.b.ForEach(func(bktKey string, bkt Bucket) bool {
@@ -172,7 +171,7 @@ func (t *Turtle) snapshot() *errors.ErrorList {
 		return
 	}))
 
-	return &errs
+	return errs
 }
 
 func (t *Turtle) Read(fn TxnFn) (err error) {
@@ -241,7 +240,9 @@ func (t *Turtle) Close() (err error) {
 
 	var errs errors.ErrorList
 	// Attempt to snapshot
-	errs.Push(t.snapshot())
+	tErrs := t.snapshot()
+	errs.Push(&tErrs)
+
 	// Close file back-end
 	errs.Push(t.mrT.Close())
 	return errs.Err()
