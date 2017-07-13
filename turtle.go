@@ -129,6 +129,9 @@ func (t *Turtle) load() (err error) {
 }
 
 func (t *Turtle) snapshot() (errs *errors.ErrorList) {
+	// Initialize errorlist
+	errs = &errors.ErrorList{}
+
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer release of read-lock
