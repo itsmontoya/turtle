@@ -85,7 +85,7 @@ func (t *Turtle) load() (err error) {
 			}
 
 			var v []byte
-			if v, ierr = fns.Unmarshal(value); err != nil {
+			if v, ierr = fns.Unmarshal(value); ierr != nil {
 				// Error encountered while unmarshaling, return and end the loop early
 				return true
 			}
