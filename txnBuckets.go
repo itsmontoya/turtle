@@ -42,6 +42,7 @@ func (tb *txnBuckets) Get(key string) (b Bucket, err error) {
 		tbkt *txnBucket
 		ok   bool
 	)
+
 	tb.mux.RLock()
 	tbkt, ok = tb.m[key]
 	tb.mux.RUnlock()
