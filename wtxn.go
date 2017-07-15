@@ -91,14 +91,11 @@ func (w *wTxn) merge() {
 			continue
 		}
 
+		bb := w.b.create(bktKey)
+
 		for refKey, a := range bkt.m {
 			if a.put {
-				w.b.create(bktKey).put(refKey, a.value)
-				continue
-			}
-
-			bb, err := w.b.get(bktKey)
-			if err != nil {
+				bb.put(refKey, a.value)
 				continue
 			}
 
