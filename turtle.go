@@ -98,6 +98,8 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 	t.mux.RLock()
 	// Defer release of read-lock
 	defer t.mux.RUnlock()
+	// Initialize errorlist before using
+	errs = &errors.ErrorList{}
 
 	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
 		// Iterate through all items
