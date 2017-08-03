@@ -1,6 +1,7 @@
 package turtleDB
 
 import (
+	"io"
 	"sync"
 	"sync/atomic"
 
@@ -73,7 +74,7 @@ func (t *Turtle) load() (err error) {
 	// To explain further - if ForEach returns a nil error, yet we encountered
 	// an unmarshal error during the loop. The error would be returned as nil.
 	var ierr error
-	if err = t.mrT.ForEach("", func(lineType byte, key, value []byte) (err error) {
+	if err = t.mrT.ForEach("", false, func(lineType byte, key, value []byte) (err error) {
 		switch lineType {
 		case mrT.PutLine:
 			var bktKey, refKey string
@@ -139,47 +140,67 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 	// Defer release of read-lock
 	defer t.mux.RUnlock()
 
-	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
-		// Iterate through all items
-		t.b.ForEach(func(bktKey string, bkt Bucket) bool {
-			var fns *Funcs
-			if fns, err = t.fm.Get(bktKey); err != nil {
-				return true
-			}
-
-			bkt.ForEach(func(refKey string, val Value) (end bool) {
-				// Marshal the value as bytes
-				b, err := fns.Marshal(val)
-				if err != nil {
-					errs.Push(err)
-					err = nil
-					// We don't necessarily need to stop the world for marshal errors,
-					// add to errors list and move on
-					return
-				}
-
-				// Put the updated bytes to the back-end
-				if err = txn.Put(mergeKeys(bktKey, refKey), b); err != nil {
-					// Errors on put are something we need to immediately yield for.
-					// The only possible errors we would encounter are:
-					// 	1. Disk issues
-					// 	2. Middleware issues
-					// Both of which would occur for every subsequent item
-					errs.Push(err)
-					return true
-				}
-
-				return
-			})
-
-			err = errs.Err()
-			return err != nil
+	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) error {
+		return t.forEachMemory(func(bktKey, refKey string, val []byte) (err error) {
+			// Put the updated bytes to the back-end
+			// The only possible errors we would encounter are:
+			// 	1. Disk issues
+			// 	2. Middleware issues
+			return txn.Put(mergeKeys(bktKey, refKey), val)
 		})
-
-		return
 	}))
 
 	return
+}
+
+// forEachMemory will go through all items in memory
+// Note: This is NOT thread-safe, please handle locking within calling func
+func (t *Turtle) forEachMemory(fn func(bkt, key string, val []byte) error) (err error) {
+	// Iterate through all items
+	t.b.ForEach(func(bktKey string, bkt Bucket) bool {
+		var fns *Funcs
+		if fns, err = t.fm.Get(bktKey); err != nil {
+			return true
+		}
+
+		bkt.ForEach(func(refKey string, val Value) (end bool) {
+			// Marshal the value as bytes
+			var b []byte
+			if b, err = fns.Marshal(val); err != nil {
+				return true
+			}
+
+			if err = fn(bktKey, refKey, b); err != nil {
+				return true
+			}
+
+			return
+		})
+
+		return err != nil
+	})
+
+	return
+}
+
+type replayFn func(lineType byte, bktKey, key string, val []byte) error
+
+// Replay will replay
+func (t *Turtle) Replay(txnID string, w io.Writer) (lastTxnID string, err error) {
+	// Acquire read-lock
+	t.mux.RLock()
+	// Defer release of read-lock
+	defer t.mux.RUnlock()
+
+	return mrT.ForEachRaw(txnID, txnID == "", func(line []byte) (err error) {
+		if _, err = w.Write(line); err != nil {
+			return
+		}
+
+		if _, err = w.Write("\n"); err != nil {
+			return
+		}
+	})
 }
 
 // Read opens a read transaction
