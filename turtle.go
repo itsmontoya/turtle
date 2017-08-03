@@ -17,6 +17,8 @@ const (
 	ErrKeyDoesNotExist = errors.Error("key does not exist")
 	// ErrEmptyKey is returned when an empty key is provided
 	ErrEmptyKey = errors.Error("empty keys are invalid")
+	// ErrSlaveUpdate is returned when an update transaction is called from a slave database
+	ErrSlaveUpdate = errors.Error("cannot call an update transaction from a slave db")
 )
 
 // Value is the value type
@@ -71,11 +73,11 @@ func (t *Turtle) load() (err error) {
 	// To explain further - if ForEach returns a nil error, yet we encountered
 	// an unmarshal error during the loop. The error would be returned as nil.
 	var ierr error
-	if err = t.mrT.ForEach(func(lineType byte, key, value []byte) (end bool) {
+	if err = t.mrT.ForEach("", func(lineType byte, key, value []byte) (err error) {
 		switch lineType {
 		case mrT.PutLine:
-			bktKey, refKey, err := getKeys(key)
-			if err != nil {
+			var bktKey, refKey string
+			if bktKey, refKey, err = getKeys(key); err != nil {
 				return
 			}
 
@@ -87,7 +89,7 @@ func (t *Turtle) load() (err error) {
 			var v Value
 			if v, ierr = fns.Unmarshal(value); err != nil {
 				// Error encountered while unmarshaling, return and end the loop early
-				return true
+				return
 			}
 
 			bkt := t.b.create(bktKey)
@@ -95,8 +97,8 @@ func (t *Turtle) load() (err error) {
 			bkt.put(refKey, v)
 
 		case mrT.DeleteLine:
-			bktKey, refKey, err := getKeys(key)
-			if err != nil {
+			var bktKey, refKey string
+			if bktKey, refKey, err = getKeys(key); err != nil {
 				return
 			}
 
@@ -106,8 +108,8 @@ func (t *Turtle) load() (err error) {
 				return
 			}
 
-			bkt, err := t.b.Get(bktKey)
-			if err != nil {
+			var bkt Bucket
+			if bkt, err = t.b.Get(bktKey); err != nil {
 				return
 			}
 
@@ -163,12 +165,15 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 					// 	1. Disk issues
 					// 	2. Middleware issues
 					// Both of which would occur for every subsequent item
-					return
+					errs.Push(err)
+					return true
 				}
+
 				return
 			})
 
-			return false
+			err = errs.Err()
+			return err != nil
 		})
 
 		return
@@ -177,6 +182,7 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 	return
 }
 
+// Read opens a read transaction
 func (t *Turtle) Read(fn TxnFn) (err error) {
 	var txn rTxn
 	// Acquire read-lock
@@ -199,7 +205,7 @@ func (t *Turtle) Read(fn TxnFn) (err error) {
 	return fn(&txn)
 }
 
-// Update will create an update transaction
+// Update opens an update transaction
 func (t *Turtle) Update(fn TxnFn) (err error) {
 	var txn wTxn
 	// Acquire write-lock
