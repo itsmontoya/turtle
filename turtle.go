@@ -69,66 +69,67 @@ func (t *Turtle) isClosed() bool {
 
 // load is called on DB initialization and will populate the in-memory store from our file back-end
 func (t *Turtle) load() (err error) {
-	// Inner error, this is intended so that the error returned by ForEach
-	// does not overwrite a true error we encounter during iteration.
-	// To explain further - if ForEach returns a nil error, yet we encountered
-	// an unmarshal error during the loop. The error would be returned as nil.
-	var ierr error
-	if err = t.mrT.ForEach("", false, func(lineType byte, key, value []byte) (err error) {
-		switch lineType {
-		case mrT.PutLine:
-			var bktKey, refKey string
-			if bktKey, refKey, err = getKeys(key); err != nil {
-				return
-			}
+	// If an error is encountered during ForEach, generally a disk or middleware related issue
+	// Any error which may be encountered SHOULD occur before any iteration occurs
+	// TODO: Do some heavy combing through the codebase to confirm this statement
+	return t.mrT.ForEach("", false, t.loadLine)
+}
 
-			var fns *Funcs
-			if fns, ierr = t.fm.Get(bktKey); ierr != nil {
-				return
-			}
+func (t *Turtle) loadLine(lineType byte, key, val []byte) (err error) {
+	switch lineType {
+	case mrT.PutLine:
+		return t.loadPutLine(key, val)
+	case mrT.DeleteLine:
+		return t.loadDelLine(key)
+	case mrT.TransactionLine, mrT.NilLine, mrT.CommentLine:
+	}
 
-			var v Value
-			if v, ierr = fns.Unmarshal(value); err != nil {
-				// Error encountered while unmarshaling, return and end the loop early
-				return
-			}
+	return
+}
 
-			bkt := t.b.create(bktKey)
-			// Set the key as our parsed value within the database store
-			bkt.put(refKey, v)
-
-		case mrT.DeleteLine:
-			var bktKey, refKey string
-			if bktKey, refKey, err = getKeys(key); err != nil {
-				return
-			}
-
-			if refKey == "" {
-				// Empty reference key represents the bucket
-				t.b.delete(bktKey)
-				return
-			}
-
-			var bkt Bucket
-			if bkt, err = t.b.Get(bktKey); err != nil {
-				return
-			}
-
-			// Remove the value from the bucket
-			bkt.Delete(refKey)
-		case mrT.TransactionLine, mrT.NilLine, mrT.CommentLine:
-		}
-
-		return
-	}); err != nil {
-		// Error encountered during ForEach, generally a disk or middleware related issue
-		// Any error which may be encountered SHOULD occur before any iteration occurs
-		// TODO: Do some heavy combing through the codebase to confirm this statement
+func (t *Turtle) loadPutLine(key, val []byte) (err error) {
+	var bktKey, refKey string
+	if bktKey, refKey, err = getKeys(key); err != nil {
 		return
 	}
 
-	// Return any inner errors encountered
-	return ierr
+	var fns *Funcs
+	if fns, err = t.fm.Get(bktKey); err != nil {
+		return
+	}
+
+	var v Value
+	if v, err = fns.Unmarshal(val); err != nil {
+		// Error encountered while unmarshaling, return and end the loop early
+		return
+	}
+
+	bkt := t.b.create(bktKey)
+	// Set the key as our parsed value within the database store
+	bkt.put(refKey, v)
+	return
+}
+
+func (t *Turtle) loadDelLine(key []byte) (err error) {
+	var bktKey, refKey string
+	if bktKey, refKey, err = getKeys(key); err != nil {
+		return
+	}
+
+	if refKey == "" {
+		// Empty reference key represents the bucket
+		t.b.delete(bktKey)
+		return
+	}
+
+	var bkt *bucket
+	if bkt, err = t.b.get(bktKey); err != nil {
+		return
+	}
+
+	// Remove the value from the bucket
+	bkt.delete(refKey)
+	return
 }
 
 func (t *Turtle) snapshot() (errs *errors.ErrorList) {
@@ -183,24 +184,22 @@ func (t *Turtle) forEachMemory(fn func(bkt, key string, val []byte) error) (err 
 	return
 }
 
-type replayFn func(lineType byte, bktKey, key string, val []byte) error
-
-// Replay will replay
-func (t *Turtle) Replay(txnID string, w io.Writer) (lastTxnID string, err error) {
+// Export will stream an export
+func (t *Turtle) Export(txnID string, w io.Writer) (err error) {
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer release of read-lock
 	defer t.mux.RUnlock()
 
-	return mrT.ForEachRaw(txnID, txnID == "", func(line []byte) (err error) {
-		if _, err = w.Write(line); err != nil {
-			return
-		}
+	return t.mrT.Export(txnID, w)
+}
 
-		if _, err = w.Write("\n"); err != nil {
-			return
-		}
-	})
+// Import will process an export
+func (t *Turtle) Import(r io.Reader) (lastTxn string, err error) {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+
+	return t.mrT.Import(r, t.loadLine)
 }
 
 // Read opens a read transaction
