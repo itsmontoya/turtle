@@ -72,13 +72,15 @@ func (b *buckets) Delete(key string) (err error) {
 }
 
 // ForEach will iterate through all the child buckets
-func (b *buckets) ForEach(fn ForEachBucketFn) {
+func (b *buckets) ForEach(fn ForEachBucketFn) (err error) {
 	b.mux.RLock()
 	defer b.mux.RUnlock()
 
 	for key, bucket := range b.m {
-		if fn(key, bucket) {
+		if err = fn(key, bucket); err != nil {
 			return
 		}
 	}
+
+	return
 }
