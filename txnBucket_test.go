@@ -29,9 +29,9 @@ func TestTxnBucket(t *testing.T) {
 	}
 
 	var cnt int
-	b.ForEach(func(key string, val Value) bool {
+	b.ForEach(func(key string, val Value) error {
 		cnt++
-		return false
+		return nil
 	})
 
 	if cnt != 1 {

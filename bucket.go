@@ -70,13 +70,15 @@ func (b *bucket) Exists(key string) (ok bool) {
 	return b.exists(key)
 }
 
-func (b *bucket) ForEach(fn ForEachFn) {
+func (b *bucket) ForEach(fn ForEachFn) (err error) {
 	b.mux.RLock()
 	defer b.mux.RUnlock()
 
 	for key, val := range b.m {
-		if fn(key, val) {
+		if err = fn(key, val); err != nil {
 			return
 		}
 	}
+
+	return
 }

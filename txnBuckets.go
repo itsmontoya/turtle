@@ -109,24 +109,25 @@ func (tb *txnBuckets) Delete(key string) (err error) {
 }
 
 // ForEach will iterate through all the child txnBuckets
-func (tb *txnBuckets) ForEach(fn ForEachBucketFn) {
+func (tb *txnBuckets) ForEach(fn ForEachBucketFn) (err error) {
 	// We are write locking because we may need to modify the buckets for the txn
 	// It may be possible to adjust this to a read lock once everything is working properly
 	tb.mux.Lock()
 	defer tb.mux.Unlock()
 
 	for key, bucket := range tb.m {
-		fn(key, bucket)
+		if err = fn(key, bucket); err != nil {
+			return
+		}
 	}
 
-	tb.b.ForEach(func(key string, bkt Bucket) (end bool) {
+	return tb.b.ForEach(func(key string, bkt Bucket) (err error) {
 		bb := bkt.(*bucket)
 		tbkt, created := tb.create(key, bb)
 		if !created {
 			return
 		}
 
-		fn(key, tbkt)
-		return
+		return fn(key, tbkt)
 	})
 }

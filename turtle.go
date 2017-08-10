@@ -160,30 +160,26 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 // Note: This is NOT thread-safe, please handle locking within calling func
 func (t *Turtle) forEachMemory(fn func(bkt, key string, val []byte) error) (err error) {
 	// Iterate through all items
-	t.b.ForEach(func(bktKey string, bkt Bucket) bool {
+	return t.b.ForEach(func(bktKey string, bkt Bucket) (err error) {
 		var fns *Funcs
 		if fns, err = t.fm.Get(bktKey); err != nil {
-			return true
+			return
 		}
 
-		bkt.ForEach(func(refKey string, val Value) (end bool) {
+		return bkt.ForEach(func(refKey string, val Value) (err error) {
 			// Marshal the value as bytes
 			var b []byte
 			if b, err = fns.Marshal(val); err != nil {
-				return true
+				return
 			}
 
 			if err = fn(bktKey, refKey, b); err != nil {
-				return true
+				return
 			}
 
 			return
 		})
-
-		return err != nil
 	})
-
-	return
 }
 
 // Export will stream an export

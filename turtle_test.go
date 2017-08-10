@@ -252,27 +252,23 @@ func TestImportExport(t *testing.T) {
 			return
 		}
 
-		bkt.ForEach(func(key string, val Value) (end bool) {
+		return bkt.ForEach(func(key string, val Value) (err error) {
 			b := string(val.([]byte))
 			switch key {
 			case "1":
 				if a := string(testVal1); a != b {
-					err = fmt.Errorf("invalid value, expected \"%s\" and received \"%s\"", a, b)
-					return true
+					return fmt.Errorf("invalid value, expected \"%s\" and received \"%s\"", a, b)
 				}
 			case "2":
-				err = errors.New("Value found at key of '2', but should not exist")
-				return true
+				return errors.New("Value found at key of '2', but should not exist")
 			case "3":
 				if a := string(testVal3); a != b {
-					err = fmt.Errorf("invalid value, expected \"%s\" and received \"%s\"", a, b)
-					return true
+					return fmt.Errorf("invalid value, expected \"%s\" and received \"%s\"", a, b)
 				}
 			}
 
 			return
 		})
-		return
 	}); err != nil {
 		t.Fatal(err)
 	}
