@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sync"
 
 	"github.com/missionMeteora/toolkit/errors"
 )
@@ -30,6 +31,8 @@ func NewHTTP(loc string) (hp *HTTP, err error) {
 
 // HTTP is an http importer to be used for Slave db's
 type HTTP struct {
+	mux sync.RWMutex
+
 	hc  http.Client
 	url *url.URL
 	// HTTP headers
@@ -43,6 +46,9 @@ func (h *HTTP) SetJar(jar http.CookieJar) {
 
 // SetHeader will set an http header
 func (h *HTTP) SetHeader(key, value string) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+
 	if h.headers == nil {
 		h.headers = make(map[string]string)
 	}
@@ -62,6 +68,8 @@ func (h *HTTP) newRequest(txnID string) (req *http.Request, err error) {
 		return
 	}
 
+	h.mux.RLock()
+	defer h.mux.RUnlock()
 	if h.headers == nil {
 		return
 	}
