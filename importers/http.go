@@ -1,6 +1,8 @@
 package importers
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -10,10 +12,9 @@ import (
 // ErrEmptyLoc is returned when an empty location is provided when calling a new http importer
 const ErrEmptyLoc = errors.Error("empty importer location")
 
-// NewHTTPImporter will return a new http importer
-// Note: This is intended to be used for Slave DB's
-func NewHTTPImporter(loc string) (hp *HTTPImporter, err error) {
-	var h HTTPImporter
+// NewHTTP will return a new http importer
+func NewHTTP(loc string) (hp *HTTP, err error) {
+	var h HTTP
 	if loc == "" {
 		err = ErrEmptyLoc
 		return
@@ -44,7 +45,7 @@ func (h *HTTP) Import(txnID string) (r io.Reader, err error) {
 		return
 	}
 
-	var buf bytes.Buffer
+	buf := bytes.NewBuffer(nil)
 	io.Copy(buf, resp.Body)
 	resp.Body.Close()
 	r = buf
