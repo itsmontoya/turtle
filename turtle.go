@@ -20,6 +20,8 @@ const (
 	ErrEmptyKey = errors.Error("empty keys are invalid")
 	// ErrSlaveUpdate is returned when an update transaction is called from a slave database
 	ErrSlaveUpdate = errors.Error("cannot call an update transaction from a slave db")
+	// ErrInvalidType is a helper error for importing services to utilize. This is not used internally
+	ErrInvalidType = errors.Error("invalid type")
 )
 
 // Value is the value type
