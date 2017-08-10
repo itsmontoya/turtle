@@ -4,10 +4,6 @@ import (
 	"io"
 	"time"
 
-	// HTTP imports
-	"net/http"
-	"net/url"
-
 	"github.com/Path94/atoms"
 	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
@@ -22,7 +18,7 @@ const (
 // Note: importInterval is interval time in seconds
 func NewSlave(name, path string, fm FuncsMap, imp Importer, importInterval int) (sp *Slave, err error) {
 	var s Slave
-	if fn == nil {
+	if imp == nil {
 		// Import function cannot be nil, return
 		err = ErrEmptyImporter
 		return
@@ -40,6 +36,8 @@ func NewSlave(name, path string, fm FuncsMap, imp Importer, importInterval int) 
 
 	// Start update loop in a new goroutine
 	go s.loop(importInterval)
+
+	sp = &s
 	return
 }
 
