@@ -32,6 +32,11 @@ type HTTP struct {
 	url *url.URL
 }
 
+// SetJar will set a cookie jar for an HTTP importer
+func (h *HTTP) SetJar(jar http.CookieJar) {
+	h.hc.Jar = jar
+}
+
 // Import will import from a given txnID and return a reader
 func (h *HTTP) Import(txnID string) (r io.Reader, err error) {
 	var resp *http.Response
