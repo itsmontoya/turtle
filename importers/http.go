@@ -36,24 +36,7 @@ type HTTP struct {
 	hc  http.Client
 	url *url.URL
 	// HTTP headers
-	headers map[string]string
-}
-
-// SetJar will set a cookie jar for an HTTP importer
-func (h *HTTP) SetJar(jar http.CookieJar) {
-	h.hc.Jar = jar
-}
-
-// SetHeader will set an http header
-func (h *HTTP) SetHeader(key, value string) {
-	h.mux.Lock()
-	defer h.mux.Unlock()
-
-	if h.headers == nil {
-		h.headers = make(map[string]string)
-	}
-
-	h.headers[key] = value
+	headers http.Header
 }
 
 func (h *HTTP) newRequest(txnID string) (req *http.Request, err error) {
@@ -68,21 +51,39 @@ func (h *HTTP) newRequest(txnID string) (req *http.Request, err error) {
 		return
 	}
 
-	h.mux.RLock()
-	defer h.mux.RUnlock()
 	if h.headers == nil {
 		return
 	}
 
-	for key, val := range h.headers {
-		req.Header.Set(key, val)
+	req.Header = h.headers
+	return
+}
+
+// SetJar will set a cookie jar for an HTTP importer
+func (h *HTTP) SetJar(jar http.CookieJar) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+
+	h.hc.Jar = jar
+}
+
+// SetHeader will set an http header
+func (h *HTTP) SetHeader(key string, values ...string) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+
+	if h.headers == nil {
+		h.headers = make(http.Header)
 	}
 
-	return
+	h.headers[key] = values
 }
 
 // Import will import from a given txnID and return a reader
 func (h *HTTP) Import(txnID string) (r io.Reader, err error) {
+	h.mux.RLock()
+	defer h.mux.RUnlock()
+
 	var req *http.Request
 	if req, err = h.newRequest(txnID); err != nil {
 		return
