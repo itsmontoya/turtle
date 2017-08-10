@@ -1,8 +1,6 @@
 package turtleDB
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -12,7 +10,6 @@ var (
 	testVal1 = []byte("value one")
 	testVal2 = []byte("value two")
 	testVal3 = []byte("value three")
-	testFM   = NewFuncsMap(testMarshal, testUnmarshal)
 )
 
 func TestMain(t *testing.T) {
@@ -21,7 +18,9 @@ func TestMain(t *testing.T) {
 		err error
 	)
 
-	if tdb, err = New("test", "./test_data", testFM); err != nil {
+	fm := NewFuncsMap(testMarshal, testUnmarshal)
+
+	if tdb, err = New("test", "./test_data", fm); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll("./test_data")
@@ -65,7 +64,7 @@ func TestMain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if tdb, err = New("test", "./test_data", testFM); err != nil {
+	if tdb, err = New("test", "./test_data", fm); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,22 +108,15 @@ func TestMain(t *testing.T) {
 	}
 }
 
-func testMarshal(val Value) (b []byte, err error) {
-	in, ok := val.([]byte)
-	if !ok {
-		err = errors.New("invalid type")
-		return
-	}
-
+func testMarshal(in []byte) (b []byte, err error) {
 	b = make([]byte, len(in))
 	copy(b, in)
 	return
 }
 
-func testUnmarshal(b []byte) (val Value, err error) {
-	out := make([]byte, len(b))
+func testUnmarshal(b []byte) (out []byte, err error) {
+	out = make([]byte, len(b))
 	copy(out, b)
-	val = out
 	return
 }
 
@@ -171,18 +163,9 @@ func testCheckValues(txn Txn) (err error) {
 }
 
 func testCheckValue(bkt Bucket, key string, ref []byte) (err error) {
-	var (
-		val Value
-		bv  []byte
-		ok  bool
-	)
-
-	if val, err = bkt.Get(key); err != nil {
+	var bv []byte
+	if bv, err = bkt.Get(key); err != nil {
 		return
-	}
-
-	if bv, ok = val.([]byte); !ok {
-		return fmt.Errorf("invalid type provided: %v", val)
 	}
 
 	if refStr, strVal := string(ref), string(bv); refStr != strVal {
@@ -190,86 +173,4 @@ func testCheckValue(bkt Bucket, key string, ref []byte) (err error) {
 	}
 
 	return
-}
-
-func TestImportExport(t *testing.T) {
-	var (
-		a, b *Turtle
-		err  error
-	)
-
-	if a, err = New("test", ".test_data_a", testFM); err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(".test_data_a")
-
-	if b, err = New("test", ".test_data_b", testFM); err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(".test_data_b")
-
-	a.Update(func(txn Txn) (err error) {
-		var bkt Bucket
-		if bkt, err = txn.Create("bkt"); err != nil {
-			return
-		}
-
-		if err = bkt.Put("1", testVal1); err != nil {
-			return
-		}
-
-		if err = bkt.Put("2", testVal2); err != nil {
-			return
-		}
-
-		if err = bkt.Put("3", testVal3); err != nil {
-			return
-		}
-
-		return
-	})
-
-	a.Update(func(txn Txn) (err error) {
-		var bkt Bucket
-		if bkt, err = txn.Get("bkt"); err != nil {
-			return
-		}
-		return bkt.Delete("2")
-	})
-
-	buf := bytes.NewBuffer(nil)
-	if err = a.Export("", buf); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err = b.Import(buf); err != nil {
-		t.Fatal(err)
-	}
-
-	if err = b.Read(func(txn Txn) (err error) {
-		var bkt Bucket
-		if bkt, err = txn.Get("bkt"); err != nil {
-			return
-		}
-
-		return bkt.ForEach(func(key string, val Value) (err error) {
-			b := string(val.([]byte))
-			switch key {
-			case "1":
-				if a := string(testVal1); a != b {
-					return fmt.Errorf("invalid value, expected \"%s\" and received \"%s\"", a, b)
-				}
-			case "2":
-				return errors.New("Value found at key of '2', but should not exist")
-			case "3":
-				if a := string(testVal3); a != b {
-					return fmt.Errorf("invalid value, expected \"%s\" and received \"%s\"", a, b)
-				}
-			}
-
-			return
-		})
-	}); err != nil {
-		t.Fatal(err)
-	}
 }
