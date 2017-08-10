@@ -20,13 +20,13 @@ func TestSlave(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(".test_master")
-	//defer master.Close()
+	defer master.Close()
 
 	if slave, err = NewSlave("testing", ".test_slave", testFM, &testImporter{master}, 1); err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(".test_slave")
-	//defer slave.Close()
+	defer slave.Close()
 
 	if err = master.Update(func(txn Txn) (err error) {
 		var bkt Bucket
@@ -65,6 +65,47 @@ func TestSlave(t *testing.T) {
 
 		if err = testValueBytes(bkt, "2", testVal2); err != nil {
 			return
+		}
+
+		if err = testValueBytes(bkt, "3", testVal3); err != nil {
+			return
+		}
+
+		return
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = master.Update(func(txn Txn) (err error) {
+		var bkt Bucket
+		if bkt, err = txn.Get("bkt"); err != nil {
+			return
+		}
+
+		if err = bkt.Delete("2"); err != nil {
+			return
+		}
+
+		return
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+
+	if err = slave.Read(func(txn Txn) (err error) {
+		var bkt Bucket
+		if bkt, err = txn.Get("bkt"); err != nil {
+			return
+		}
+
+		if err = testValueBytes(bkt, "1", testVal1); err != nil {
+			return
+		}
+
+		// Key of "2" should not exist anymore
+		if err = testValueBytes(bkt, "2", testVal2); err != ErrKeyDoesNotExist {
+			return fmt.Errorf("Expected an error of \"%s\" and received \"%v\"", ErrKeyDoesNotExist, err)
 		}
 
 		if err = testValueBytes(bkt, "3", testVal3); err != nil {
