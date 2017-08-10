@@ -84,6 +84,11 @@ func (s *Slave) importReader(r io.Reader) {
 		return
 	}
 
+	if ltxn == "" {
+		// No import occurred, do not update txn
+		return
+	}
+
 	// Update the last txn value
 	s.lastTxn.Store(ltxn)
 	return
