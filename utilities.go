@@ -37,7 +37,7 @@ type Txn interface {
 	// Delete bucket by key
 	Delete(key string) error
 	// ForEach bucket
-	ForEach(fn ForEachBucketFn)
+	ForEach(fn ForEachBucketFn) error
 }
 
 // Bucket represents a db bucket
@@ -51,14 +51,14 @@ type Bucket interface {
 	// Exists returns whether or not a value exists for a given key
 	Exists(key string) bool
 	// ForEach key/value pair
-	ForEach(fn ForEachFn)
+	ForEach(fn ForEachFn) error
 }
 
 // ForEachBucketFn is used for iterate through each bucket
-type ForEachBucketFn func(key string, bkt Bucket) (end bool)
+type ForEachBucketFn func(key string, bkt Bucket) (err error)
 
 // ForEachFn is used for iterate through each value
-type ForEachFn func(key string, value Value) (end bool)
+type ForEachFn func(key string, value Value) (err error)
 
 // TxnFn is used for transactions
 type TxnFn func(txn Txn) error

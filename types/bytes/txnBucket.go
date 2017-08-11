@@ -82,9 +82,9 @@ func (t *txnBucket) deleteAll() {
 	t.mux.Lock()
 	defer t.mux.Unlock()
 
-	t.forEach(func(key string, _ []byte) bool {
+	t.forEach(func(key string, _ []byte) (err error) {
 		t.delete(key)
-		return false
+		return
 	})
 }
 
@@ -103,13 +103,13 @@ func (t *txnBucket) exists(key string) (ok bool) {
 	return false
 }
 
-func (t *txnBucket) forEach(fn ForEachFn) {
+func (t *txnBucket) forEach(fn ForEachFn) (err error) {
 	for key, a := range t.m {
 		if !a.put {
 			continue
 		}
 
-		if fn(key, a.value) {
+		if err = fn(key, a.value); err != nil {
 			return
 		}
 	}
@@ -118,13 +118,12 @@ func (t *txnBucket) forEach(fn ForEachFn) {
 		return
 	}
 
-	t.b.ForEach(func(key string, val []byte) (end bool) {
+	return t.b.ForEach(func(key string, val []byte) (err error) {
 		if _, ok := t.m[key]; ok {
 			return
 		}
 
-		fn(key, val)
-		return
+		return fn(key, val)
 	})
 }
 
@@ -160,8 +159,9 @@ func (t *txnBucket) Exists(key string) (ok bool) {
 	return
 }
 
-func (t *txnBucket) ForEach(fn ForEachFn) {
+func (t *txnBucket) ForEach(fn ForEachFn) (err error) {
 	t.mux.RLock()
-	t.forEach(fn)
+	err = t.forEach(fn)
 	t.mux.RUnlock()
+	return
 }

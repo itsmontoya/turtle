@@ -1,6 +1,7 @@
 package turtleDB
 
 import (
+	"io"
 	"sync"
 	"sync/atomic"
 
@@ -17,6 +18,10 @@ const (
 	ErrKeyDoesNotExist = errors.Error("key does not exist")
 	// ErrEmptyKey is returned when an empty key is provided
 	ErrEmptyKey = errors.Error("empty keys are invalid")
+	// ErrSlaveUpdate is returned when an update transaction is called from a slave database
+	ErrSlaveUpdate = errors.Error("cannot call an update transaction from a slave db")
+	// ErrInvalidType is a helper error for importing services to utilize. This is not used internally
+	ErrInvalidType = errors.Error("invalid type")
 )
 
 // Value is the value type
@@ -66,66 +71,67 @@ func (t *Turtle) isClosed() bool {
 
 // load is called on DB initialization and will populate the in-memory store from our file back-end
 func (t *Turtle) load() (err error) {
-	// Inner error, this is intended so that the error returned by ForEach
-	// does not overwrite a true error we encounter during iteration.
-	// To explain further - if ForEach returns a nil error, yet we encountered
-	// an unmarshal error during the loop. The error would be returned as nil.
-	var ierr error
-	if err = t.mrT.ForEach(func(lineType byte, key, value []byte) (end bool) {
-		switch lineType {
-		case mrT.PutLine:
-			bktKey, refKey, err := getKeys(key)
-			if err != nil {
-				return
-			}
+	// If an error is encountered during ForEach, generally a disk or middleware related issue
+	// Any error which may be encountered SHOULD occur before any iteration occurs
+	// TODO: Do some heavy combing through the codebase to confirm this statement
+	return t.mrT.ForEach("", false, t.loadLine)
+}
 
-			var fns *Funcs
-			if fns, ierr = t.fm.Get(bktKey); ierr != nil {
-				return
-			}
+func (t *Turtle) loadLine(lineType byte, key, val []byte) (err error) {
+	switch lineType {
+	case mrT.PutLine:
+		return t.loadPutLine(key, val)
+	case mrT.DeleteLine:
+		return t.loadDelLine(key)
+	case mrT.TransactionLine, mrT.NilLine, mrT.CommentLine:
+	}
 
-			var v Value
-			if v, ierr = fns.Unmarshal(value); err != nil {
-				// Error encountered while unmarshaling, return and end the loop early
-				return true
-			}
+	return
+}
 
-			bkt := t.b.create(bktKey)
-			// Set the key as our parsed value within the database store
-			bkt.put(refKey, v)
-
-		case mrT.DeleteLine:
-			bktKey, refKey, err := getKeys(key)
-			if err != nil {
-				return
-			}
-
-			if refKey == "" {
-				// Empty reference key represents the bucket
-				t.b.delete(bktKey)
-				return
-			}
-
-			bkt, err := t.b.Get(bktKey)
-			if err != nil {
-				return
-			}
-
-			// Remove the value from the bucket
-			bkt.Delete(refKey)
-		case mrT.TransactionLine, mrT.NilLine, mrT.CommentLine:
-		}
-
-		return
-	}); err != nil {
-		// Error encountered during ForEach, generally a disk or middleware related issue
-		// Any error which may be encountered SHOULD occur before any iteration occurs
-		// TODO: Do some heavy combing through the codebase to confirm this statement
+func (t *Turtle) loadPutLine(key, val []byte) (err error) {
+	var bktKey, refKey string
+	if bktKey, refKey, err = getKeys(key); err != nil {
 		return
 	}
 
-	// Return any inner errors encountered
-	return ierr
+	var fns *Funcs
+	if fns, err = t.fm.Get(bktKey); err != nil {
+		return
+	}
+
+	var v Value
+	if v, err = fns.Unmarshal(val); err != nil {
+		// Error encountered while unmarshaling, return and end the loop early
+		return
+	}
+
+	bkt := t.b.create(bktKey)
+	// Set the key as our parsed value within the database store
+	bkt.put(refKey, v)
+	return
+}
+
+func (t *Turtle) loadDelLine(key []byte) (err error) {
+	var bktKey, refKey string
+	if bktKey, refKey, err = getKeys(key); err != nil {
+		return
+	}
+
+	if refKey == "" {
+		// Empty reference key represents the bucket
+		t.b.delete(bktKey)
+		return
+	}
+
+	var bkt *bucket
+	if bkt, err = t.b.get(bktKey); err != nil {
+		return
+	}
+
+	// Remove the value from the bucket
+	bkt.delete(refKey)
+	return
 }
 
 func (t *Turtle) snapshot() (errs *errors.ErrorList) {
@@ -137,46 +143,64 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 	// Defer release of read-lock
 	defer t.mux.RUnlock()
 
-	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) (err error) {
-		// Iterate through all items
-		t.b.ForEach(func(bktKey string, bkt Bucket) bool {
-			var fns *Funcs
-			if fns, err = t.fm.Get(bktKey); err != nil {
-				return true
-			}
-
-			bkt.ForEach(func(refKey string, val Value) (end bool) {
-				// Marshal the value as bytes
-				b, err := fns.Marshal(val)
-				if err != nil {
-					errs.Push(err)
-					err = nil
-					// We don't necessarily need to stop the world for marshal errors,
-					// add to errors list and move on
-					return
-				}
-
-				// Put the updated bytes to the back-end
-				if err = txn.Put(mergeKeys(bktKey, refKey), b); err != nil {
-					// Errors on put are something we need to immediately yield for.
-					// The only possible errors we would encounter are:
-					// 	1. Disk issues
-					// 	2. Middleware issues
-					// Both of which would occur for every subsequent item
-					return
-				}
-				return
-			})
-
-			return false
+	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) error {
+		return t.forEachMemory(func(bktKey, refKey string, val []byte) (err error) {
+			// Put the updated bytes to the back-end
+			// The only possible errors we would encounter are:
+			// 	1. Disk issues
+			// 	2. Middleware issues
+			return txn.Put(mergeKeys(bktKey, refKey), val)
 		})
-
-		return
 	}))
 
 	return
 }
 
+// forEachMemory will go through all items in memory
+// Note: This is NOT thread-safe, please handle locking within calling func
+func (t *Turtle) forEachMemory(fn func(bkt, key string, val []byte) error) (err error) {
+	// Iterate through all items
+	return t.b.ForEach(func(bktKey string, bkt Bucket) (err error) {
+		var fns *Funcs
+		if fns, err = t.fm.Get(bktKey); err != nil {
+			return
+		}
+
+		return bkt.ForEach(func(refKey string, val Value) (err error) {
+			// Marshal the value as bytes
+			var b []byte
+			if b, err = fns.Marshal(val); err != nil {
+				return
+			}
+
+			if err = fn(bktKey, refKey, b); err != nil {
+				return
+			}
+
+			return
+		})
+	})
+}
+
+// Export will stream an export
+func (t *Turtle) Export(txnID string, w io.Writer) (err error) {
+	// Acquire read-lock
+	t.mux.RLock()
+	// Defer release of read-lock
+	defer t.mux.RUnlock()
+
+	return t.mrT.Export(txnID, w)
+}
+
+// Import will process an export
+func (t *Turtle) Import(r io.Reader) (lastTxn string, err error) {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+
+	return t.mrT.Import(r, t.loadLine)
+}
+
+// Read opens a read transaction
 func (t *Turtle) Read(fn TxnFn) (err error) {
 	var txn rTxn
 	// Acquire read-lock
@@ -199,7 +223,7 @@ func (t *Turtle) Read(fn TxnFn) (err error) {
 	return fn(&txn)
 }
 
-// Update will create an update transaction
+// Update opens an update transaction
 func (t *Turtle) Update(fn TxnFn) (err error) {
 	var txn wTxn
 	// Acquire write-lock

@@ -95,14 +95,11 @@ func (w *wTxn) merge() {
 			continue
 		}
 
+		bb := w.b.create(bktKey)
+
 		for refKey, a := range bkt.m {
 			if a.put {
-				w.b.create(bktKey).put(refKey, a.value)
-				continue
-			}
-
-			bb, err := w.b.get(bktKey)
-			if err != nil {
+				bb.put(refKey, a.value)
 				continue
 			}
 
@@ -126,6 +123,6 @@ func (w *wTxn) Delete(key string) (err error) {
 }
 
 // ForEach will iterate through all buckets
-func (w *wTxn) ForEach(fn ForEachBucketFn) {
-	w.tb.ForEach(fn)
+func (w *wTxn) ForEach(fn ForEachBucketFn) error {
+	return w.tb.ForEach(fn)
 }

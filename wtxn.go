@@ -119,6 +119,6 @@ func (w *wTxn) Delete(key string) (err error) {
 }
 
 // ForEach will iterate through all buckets
-func (w *wTxn) ForEach(fn ForEachBucketFn) {
-	w.tb.ForEach(fn)
+func (w *wTxn) ForEach(fn ForEachBucketFn) error {
+	return w.tb.ForEach(fn)
 }
