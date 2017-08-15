@@ -44,17 +44,17 @@ func (tb *txnBuckets) Get(key string) (b Bucket, err error) {
 	)
 
 	tb.mux.RLock()
-	tbkt, ok = tb.m[key]
-	tb.mux.RUnlock()
-
-	if ok {
+	if tbkt, ok = tb.m[key]; ok {
 		if tbkt.deleted {
 			// This bucket was deleted during the txn
 			err = ErrKeyDoesNotExist
-			return
+		} else {
+			b = tbkt
 		}
+	}
+	tb.mux.RUnlock()
 
-		b = tbkt
+	if ok {
 		return
 	}
 
