@@ -28,9 +28,10 @@ const (
 type Value generic.Type
 
 // New will return a new instance of Turtle
-func New(name, path string, fm FuncsMap) (tp *Turtle, err error) {
+func New(name, path string, fm FuncsMap, mws ...middleware.Middleware) (tp *Turtle, err error) {
 	var t Turtle
-	if t.mrT, err = mrT.New(path, name, middleware.Base64MW{}); err != nil {
+	mws = append([]middleware.Middleware{middleware.Base64MW{}}, mws...)
+	if t.mrT, err = mrT.New(path, name, mws...); err != nil {
 		return
 	}
 
