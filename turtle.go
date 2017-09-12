@@ -29,7 +29,6 @@ type Value interface{}
 // New will return a new instance of Turtle
 func New(name, path string, fm FuncsMap, mws ...middleware.Middleware) (tp *Turtle, err error) {
 	var t Turtle
-	//	mws = append([]middleware.Middleware{middleware.Base64MW{}}, mws...)
 	mws = append(mws, middleware.Base64MW{})
 	if t.mrT, err = mrT.New(path, name, mws...); err != nil {
 		return
