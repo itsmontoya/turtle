@@ -5,7 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cheekybits/genny/generic"
 	"github.com/itsmontoya/middleware"
 	"github.com/itsmontoya/mrT"
 	"github.com/missionMeteora/toolkit/errors"
@@ -25,7 +24,7 @@ const (
 )
 
 // Value is the value type
-type Value generic.Type
+type Value interface{}
 
 // New will return a new instance of Turtle
 func New(name, path string, fm FuncsMap, mws ...middleware.Middleware) (tp *Turtle, err error) {
