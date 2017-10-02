@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"encoding/json"
+
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -24,6 +25,12 @@ type action struct {
 	put bool
 	// value of action, only looked at during put state
 	value Value
+}
+
+// DB is a basic database type
+type DB interface {
+	Read(TxnFn) error
+	Update(TxnFn) error
 }
 
 // Txn is a basic transaction interface
