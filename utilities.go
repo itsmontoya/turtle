@@ -3,6 +3,7 @@ package turtleDB
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 
 	"github.com/missionMeteora/toolkit/errors"
 )
@@ -30,6 +31,9 @@ type action struct {
 type DB interface {
 	Read(TxnFn) error
 	Update(TxnFn) error
+	Import(r io.Reader) (txnID string, err error)
+	Export(txnID string, w io.Writer) error
+	Close() error
 }
 
 // Txn is a basic transaction interface
