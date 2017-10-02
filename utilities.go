@@ -2,7 +2,6 @@ package turtleDB
 
 import (
 	"bytes"
-
 	"encoding/json"
 
 	"github.com/missionMeteora/toolkit/errors"
