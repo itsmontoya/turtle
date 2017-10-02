@@ -104,6 +104,16 @@ func (s *Slave) Update(fn TxnFn) (err error) {
 	return ErrSlaveUpdate
 }
 
+// Import will process an export
+func (s *Slave) Import(r io.Reader) (txnID string, err error) {
+	return "", ErrSlaveUpdate
+}
+
+// Export will stream
+func (s *Slave) Export(txnID string, w io.Writer) (err error) {
+	return s.db.Export(txnID, w)
+}
+
 // TxnID will return the current transaction id
 func (s *Slave) TxnID() (txnID string) {
 	return s.lastTxn.Load()
