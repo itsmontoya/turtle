@@ -55,17 +55,18 @@ type Slave struct {
 
 func (s *Slave) loop(importInterval int) {
 	var (
-		r   io.Reader
+		rc  io.ReadCloser
 		err error
 	)
 
 	for !s.closed.Get() {
-		if r, err = s.fn(s.lastTxn.Load()); err != nil {
+		if rc, err = s.fn(s.lastTxn.Load()); err != nil {
 			// We encountered an error while importing, log the error and continue on
 			s.out.Error("Error importing: %v", err)
 		} else {
 			// We successfully received the reader, import reader
-			s.importReader(r)
+			s.importReader(rc)
+			rc.Close()
 		}
 
 		time.Sleep(time.Second * time.Duration(importInterval))
@@ -129,9 +130,9 @@ func (s *Slave) Close() (err error) {
 }
 
 // ImportFn is called when an import is requested
-type ImportFn func(txnID string) (io.Reader, error)
+type ImportFn func(txnID string) (io.ReadCloser, error)
 
 // Importer is the interface needed to call import for Slave DBs
 type Importer interface {
-	Import(txnID string) (r io.Reader, err error)
+	Import(txnID string) (rc io.ReadCloser, err error)
 }

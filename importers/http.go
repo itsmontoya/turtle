@@ -1,7 +1,6 @@
 package importers
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"net/url"
@@ -80,7 +79,7 @@ func (h *HTTP) SetHeader(key string, values ...string) {
 }
 
 // Import will import from a given txnID and return a reader
-func (h *HTTP) Import(txnID string) (r io.Reader, err error) {
+func (h *HTTP) Import(txnID string) (rc io.ReadCloser, err error) {
 	h.mux.RLock()
 	defer h.mux.RUnlock()
 
@@ -94,9 +93,6 @@ func (h *HTTP) Import(txnID string) (r io.Reader, err error) {
 		return
 	}
 
-	buf := bytes.NewBuffer(nil)
-	io.Copy(buf, resp.Body)
-	resp.Body.Close()
-	r = buf
+	rc = resp.Body
 	return
 }
