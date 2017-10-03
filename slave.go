@@ -4,7 +4,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/Path94/atoms"
+	"github.com/PathDNA/atoms"
 	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
 )
