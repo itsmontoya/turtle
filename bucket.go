@@ -76,8 +76,12 @@ func (b *bucket) ForEach(fn ForEachFn) (err error) {
 
 	for key, val := range b.m {
 		if err = fn(key, val); err != nil {
-			return
+			break
 		}
+	}
+
+	if err == Break {
+		err = nil
 	}
 
 	return

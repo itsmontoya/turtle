@@ -38,6 +38,22 @@ func TestTxnBucket(t *testing.T) {
 		t.Fatalf("invalid count, expected %d and received %d", 1, cnt)
 	}
 
+	if err = b.Put("1", "hello_world"); err != nil {
+		t.Fatal(err)
+	}
+
+	cnt = 0
+	if err = b.ForEach(func(key string, val Value) error {
+		cnt++
+		return Break
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if cnt != 1 {
+		t.Fatalf("invalid count, expected %d and received %d", 1, cnt)
+	}
+
 	if err = b.Delete("0"); err != nil {
 		t.Fatal(err)
 	}

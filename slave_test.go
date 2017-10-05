@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -144,12 +145,12 @@ type testImporter struct {
 	master *Turtle
 }
 
-func (t *testImporter) Import(txnID string) (r io.Reader, err error) {
+func (t *testImporter) Import(txnID string) (rc io.ReadCloser, err error) {
 	buf := bytes.NewBuffer(nil)
 	if err = t.master.Export(txnID, buf); err != nil {
 		return
 	}
 
-	r = buf
+	rc = ioutil.NopCloser(buf)
 	return
 }
