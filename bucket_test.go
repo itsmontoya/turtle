@@ -47,10 +47,12 @@ func TestBucket(t *testing.T) {
 	b.put("1", "hello_world")
 
 	cnt = 0
-	b.ForEach(func(key string, val Value) error {
+	if err = b.ForEach(func(key string, val Value) error {
 		cnt++
 		return Break
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	if cnt != 1 {
 		t.Fatalf("invalid count, expected %d and received %d", 1, cnt)
