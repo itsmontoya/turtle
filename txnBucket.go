@@ -114,13 +114,17 @@ func (t *txnBucket) forEach(fn ForEachFn) (err error) {
 		return
 	}
 
-	return t.b.ForEach(func(key string, val Value) (err error) {
+	if err = t.b.ForEach(func(key string, val Value) (err error) {
 		if _, ok := t.m[key]; ok {
 			return
 		}
 
 		return fn(key, val)
-	})
+	}); err == Break {
+		err = nil
+	}
+
+	return
 }
 
 func (t *txnBucket) Get(key string) (value Value, err error) {
