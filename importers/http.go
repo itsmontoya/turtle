@@ -2,6 +2,7 @@ package importers
 
 import (
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -10,8 +11,12 @@ import (
 	"github.com/missionMeteora/toolkit/errors"
 )
 
-// ErrEmptyLoc is returned when an empty location is provided when calling a new http importer
-const ErrEmptyLoc = errors.Error("empty importer location")
+const (
+	// ErrEmptyLoc is returned when an empty location is provided when calling a new http importer
+	ErrEmptyLoc = errors.Error("empty importer location")
+	// ErrNoContent is returned when no new content is available on import
+	ErrNoContent = errors.Error("no content")
+)
 
 // NewHTTP will return a new http importer
 func NewHTTP(loc string) (hp *HTTP, err error) {
@@ -93,6 +98,21 @@ func (h *HTTP) Import(txnID string) (rc io.ReadCloser, err error) {
 		return
 	}
 
-	rc = resp.Body
+	switch resp.StatusCode {
+	case http.StatusOK:
+		rc = resp.Body
+	case http.StatusNoContent:
+		err = ErrNoContent
+	default:
+		var eb []byte
+		eb, err = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return
+		}
+
+		err = errors.Error(string(eb))
+	}
+
 	return
 }
