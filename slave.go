@@ -4,6 +4,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/PathDNA/turtleDB/importers"
+
 	"github.com/PathDNA/atoms"
 	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
@@ -67,8 +69,10 @@ func (s *Slave) loop(importInterval int) {
 
 	for !s.closed.Get() {
 		if rc, err = s.fn(s.lastTxn.Load()); err != nil {
-			// We encountered an error while importing, log the error and continue on
-			s.out.Error("Error importing: %v", err)
+			if err != importers.ErrNoContent {
+				// We encountered an error while importing, log the error and continue on
+				s.out.Error("Error importing: %v", err)
+			}
 		} else {
 			// We successfully received the reader, import reader
 			s.importReader(rc)
