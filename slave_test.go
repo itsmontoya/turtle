@@ -117,6 +117,8 @@ func TestSlave(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
+	time.Sleep(time.Second * 3)
 }
 
 func testValueBytes(bkt Bucket, key string, b []byte) (err error) {
