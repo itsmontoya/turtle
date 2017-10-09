@@ -34,6 +34,12 @@ func NewSlave(name, path string, fm FuncsMap, imp Importer, importInterval int) 
 	// Set import func
 	s.fn = imp.Import
 
+	s.db.Read(func(txn Txn) (err error) {
+		lastTxn, err := s.db.mrT.LastTxn()
+		s.lastTxn.Store(lastTxn)
+		return
+	})
+
 	// Start update loop in a new goroutine
 	go s.loop(importInterval)
 
