@@ -21,6 +21,8 @@ const (
 	ErrSlaveUpdate = errors.Error("cannot call an update transaction from a slave db")
 	// ErrInvalidType is a helper error for importing services to utilize. This is not used internally
 	ErrInvalidType = errors.Error("invalid type")
+	// ErrNoTxn is an alias error for mrT.ErrNoTxn
+	ErrNoTxn = mrT.ErrNoTxn
 	// Break is used to break out of ForEach loops early. This will cause the ForEach to return a nil error
 	Break = errors.Error("break!")
 )
