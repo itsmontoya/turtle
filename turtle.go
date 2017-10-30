@@ -262,6 +262,13 @@ func (t *Turtle) Update(fn TxnFn) (err error) {
 	return
 }
 
+// ForEachTxn is used to iterate through transactions
+func (t *Turtle) ForEachTxn(txnID string, archive bool, fn mrT.ForEachFn) (err error) {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+	return t.mrT.ForEach(txnID, archive, fn)
+}
+
 // Close will close Turtle
 func (t *Turtle) Close() (err error) {
 	if !atomic.CompareAndSwapUint32(&t.closed, 0, 1) {
