@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/PathDNA/turtleDB/importers"
+	"github.com/itsmontoya/mrT"
 
 	"github.com/PathDNA/atoms"
 	"github.com/missionMeteora/journaler"
@@ -123,6 +124,11 @@ func (s *Slave) Import(r io.Reader) (txnID string, err error) {
 // Export will stream
 func (s *Slave) Export(txnID string, w io.Writer) (err error) {
 	return s.db.Export(txnID, w)
+}
+
+// ForEachTxn will iterate through all actions from a given txn
+func (s *Slave) ForEachTxn(txnID string, archive bool, fn mrT.ForEachFn) (err error) {
+	return s.db.ForEachTxn(txnID, archive, fn)
 }
 
 // TxnID will return the current transaction id
