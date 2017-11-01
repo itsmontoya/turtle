@@ -117,6 +117,10 @@ func (tb *txnBuckets) ForEach(fn ForEachBucketFn) (err error) {
 
 	for key, bucket := range tb.m {
 		if err = fn(key, bucket); err != nil {
+			if err == Break {
+				err = nil
+			}
+
 			return
 		}
 	}

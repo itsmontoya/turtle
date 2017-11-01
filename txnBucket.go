@@ -106,6 +106,10 @@ func (t *txnBucket) forEach(fn ForEachFn) (err error) {
 		}
 
 		if err = fn(key, a.value); err != nil {
+			if err == Break {
+				err = nil
+			}
+
 			return
 		}
 	}
