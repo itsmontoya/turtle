@@ -29,6 +29,8 @@ func TestSlave(t *testing.T) {
 	defer os.RemoveAll(".test_slave")
 	defer slave.Close()
 
+	slave.SetVerbosity(VerbosityError | VerbosityNotification | VerbositySuccess)
+
 	if err = master.Update(func(txn Txn) (err error) {
 		var bkt Bucket
 		if bkt, err = txn.Create("bkt"); err != nil {

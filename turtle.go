@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/missionMeteora/journaler"
+
 	"github.com/itsmontoya/middleware"
 	"github.com/itsmontoya/mrT"
 	"github.com/missionMeteora/toolkit/errors"
@@ -33,6 +35,9 @@ type Value interface{}
 // New will return a new instance of Turtle
 func New(name, path string, fm FuncsMap, mws ...middleware.Middleware) (tp *Turtle, err error) {
 	var t Turtle
+	t.out = journaler.New("TurtleDB", name)
+	t.v = DefaultVerbosity
+
 	mws = append(mws, middleware.Base64MW{})
 	if t.mrT, err = mrT.New(path, name, mws...); err != nil {
 		return
@@ -60,10 +65,14 @@ type Turtle struct {
 	mux sync.RWMutex
 	// Back-end persistence
 	mrT *mrT.MrT
-
-	b  *buckets
+	// Stdout logging
+	out *journaler.Journaler
+	// Internal buckets
+	b *buckets
+	// Internal funcs map
 	fm FuncsMap
-
+	// Verbosity levels
+	v Verbosity
 	// Closed state
 	closed uint32
 }
@@ -75,6 +84,7 @@ func (t *Turtle) isClosed() bool {
 
 // load is called on DB initialization and will populate the in-memory store from our file back-end
 func (t *Turtle) load() (err error) {
+	t.logNotification("Loading data from disk")
 	// If an error is encountered during ForEach, generally a disk or middleware related issue
 	// Any error which may be encountered SHOULD occur before any iteration occurs
 	// TODO: Do some heavy combing through the codebase to confirm this statement
@@ -139,6 +149,7 @@ func (t *Turtle) loadDelLine(key []byte) (err error) {
 }
 
 func (t *Turtle) snapshot() (errs *errors.ErrorList) {
+	t.logNotification("Performing snapshot")
 	// Initialize errorlist
 	errs = &errors.ErrorList{}
 
@@ -186,8 +197,33 @@ func (t *Turtle) forEachMemory(fn func(bkt, key string, val []byte) error) (err 
 	})
 }
 
+func (t *Turtle) logError(fmt string, vals ...interface{}) {
+	if !t.v.CanError() {
+		return
+	}
+
+	t.out.Error(fmt, vals...)
+}
+
+func (t *Turtle) logSuccess(fmt string, vals ...interface{}) {
+	if !t.v.CanSuccess() {
+		return
+	}
+
+	t.out.Success(fmt, vals...)
+}
+
+func (t *Turtle) logNotification(fmt string, vals ...interface{}) {
+	if !t.v.CanNotify() {
+		return
+	}
+
+	t.out.Notification(fmt, vals...)
+}
+
 // Export will stream an export
 func (t *Turtle) Export(txnID string, w io.Writer) (err error) {
+	t.logNotification("Exporting from: %s", txnID)
 	// Acquire read-lock
 	t.mux.RLock()
 	// Defer release of read-lock
@@ -269,6 +305,13 @@ func (t *Turtle) ForEachTxn(txnID string, archive bool, fn mrT.ForEachFn) (err e
 	return t.mrT.ForEach(txnID, archive, fn)
 }
 
+// SetVerbosity will set the verbosity level for Turtle
+func (t *Turtle) SetVerbosity(v Verbosity) {
+	t.mux.Lock()
+	t.v = v
+	t.mux.Unlock()
+}
+
 // Close will close Turtle
 func (t *Turtle) Close() (err error) {
 	if !atomic.CompareAndSwapUint32(&t.closed, 0, 1) {
@@ -276,6 +319,7 @@ func (t *Turtle) Close() (err error) {
 		return errors.ErrIsClosed
 	}
 
+	t.logNotification("Closing")
 	var errs errors.ErrorList
 	// Attempt to snapshot
 	errs.Push(t.snapshot())
