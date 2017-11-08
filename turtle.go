@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/missionMeteora/journaler"
+
 	"github.com/itsmontoya/middleware"
 	"github.com/itsmontoya/mrT"
 	"github.com/missionMeteora/toolkit/errors"
@@ -33,6 +35,9 @@ type Value interface{}
 // New will return a new instance of Turtle
 func New(name, path string, fm FuncsMap, mws ...middleware.Middleware) (tp *Turtle, err error) {
 	var t Turtle
+	t.out = journaler.New("TurtleDB", name)
+	t.v = DefaultVerbosity
+
 	mws = append(mws, middleware.Base64MW{})
 	if t.mrT, err = mrT.New(path, name, mws...); err != nil {
 		return
@@ -60,10 +65,14 @@ type Turtle struct {
 	mux sync.RWMutex
 	// Back-end persistence
 	mrT *mrT.MrT
-
-	b  *buckets
+	// Stdout logging
+	out *journaler.Journaler
+	// Internal buckets
+	b *buckets
+	// Internal funcs map
 	fm FuncsMap
-
+	// Verbosity levels
+	v Verbosity
 	// Closed state
 	closed uint32
 }
@@ -267,6 +276,13 @@ func (t *Turtle) ForEachTxn(txnID string, archive bool, fn mrT.ForEachFn) (err e
 	t.mux.Lock()
 	defer t.mux.Unlock()
 	return t.mrT.ForEach(txnID, archive, fn)
+}
+
+// SetVerbosity will set the verbosity level for Turtle
+func (t *Turtle) SetVerbosity(v Verbosity) {
+	t.mux.Lock()
+	t.v = v
+	t.mux.Unlock()
 }
 
 // Close will close Turtle
