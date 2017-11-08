@@ -35,6 +35,7 @@ type DB interface {
 	Import(r io.Reader) (txnID string, err error)
 	Export(txnID string, w io.Writer) error
 	ForEachTxn(txnID string, archive bool, fn mrT.ForEachFn) (err error)
+	SetVerbosity(Verbosity)
 	Close() error
 }
 
