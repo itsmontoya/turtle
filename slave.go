@@ -63,36 +63,38 @@ type Slave struct {
 }
 
 func (s *Slave) loop(importInterval int) {
-	var (
-		rc  io.ReadCloser
-		err error
-	)
-
+	var err error
 	for !s.closed.Get() {
-		if rc, err = s.fn(s.lastTxn.Load()); err != nil {
-			if err != importers.ErrNoContent {
-				// We encountered an error while importing, log the error and continue on
-				s.out.Error("Error importing: %v", err)
-			}
-		} else {
-			// We successfully received the reader, import reader
-			s.importReader(rc)
-			rc.Close()
+		s.db.logNotification("About to import from %v", s.lastTxn.Load())
+		err = s.importMaster()
+		switch err {
+		case nil:
+			s.db.logSuccess("Imported successfully to %v", s.lastTxn.Load())
+		case importers.ErrNoContent, ErrNoTxn:
+			s.db.logNotification("Import attempted, no new transactions available")
+		default:
+			s.db.logError("Error encountered while importing: %v", err)
 		}
 
 		time.Sleep(time.Second * time.Duration(importInterval))
 	}
 }
 
-func (s *Slave) importReader(r io.Reader) {
-	var (
-		ltxn string
-		err  error
-	)
+// importMaster will attempt to import new transactions from master
+func (s *Slave) importMaster() (err error) {
+	var rc io.ReadCloser
+	if rc, err = s.fn(s.lastTxn.Load()); err != nil {
+		return
+	}
+	defer rc.Close()
+	// We successfully received the reader, import reader
+	return s.importReader(rc)
+}
 
+func (s *Slave) importReader(r io.Reader) (err error) {
+	var ltxn string
 	if ltxn, err = s.db.Import(r); err != nil {
 		// We encountered an error while importing, log the error and continue on
-		s.out.Error("Error importing: %v", err)
 		return
 	}
 
@@ -134,6 +136,11 @@ func (s *Slave) ForEachTxn(txnID string, archive bool, fn mrT.ForEachFn) (err er
 // TxnID will return the current transaction id
 func (s *Slave) TxnID() (txnID string) {
 	return s.lastTxn.Load()
+}
+
+// SetVerbosity will set the verbosity level for Turtle
+func (s *Slave) SetVerbosity(v Verbosity) {
+	s.db.SetVerbosity(v)
 }
 
 // Close will close the slave
