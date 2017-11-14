@@ -36,6 +36,7 @@ type DB interface {
 	Export(txnID string, w io.Writer) error
 	ForEachTxn(txnID string, archive bool, fn mrT.ForEachFn) (err error)
 	SetVerbosity(Verbosity)
+	SetAoC(aoc bool)
 	Close() error
 }
 

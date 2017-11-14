@@ -55,6 +55,7 @@ func New(name, path string, fm FuncsMap, mws ...middleware.Middleware) (tp *Turt
 		return
 	}
 
+	t.aoc = true
 	tp = &t
 	return
 }
@@ -73,6 +74,8 @@ type Turtle struct {
 	fm FuncsMap
 	// Verbosity levels
 	v Verbosity
+	// Archive on close
+	aoc bool
 	// Closed state
 	closed uint32
 }
@@ -312,6 +315,13 @@ func (t *Turtle) SetVerbosity(v Verbosity) {
 	t.mux.Unlock()
 }
 
+// SetAoC will set the archive on close value
+func (t *Turtle) SetAoC(aoc bool) {
+	t.mux.Lock()
+	t.aoc = aoc
+	t.mux.Unlock()
+}
+
 // Close will close Turtle
 func (t *Turtle) Close() (err error) {
 	if !atomic.CompareAndSwapUint32(&t.closed, 0, 1) {
@@ -321,8 +331,10 @@ func (t *Turtle) Close() (err error) {
 
 	t.logNotification("Closing")
 	var errs errors.ErrorList
-	// Attempt to snapshot
-	errs.Push(t.snapshot())
+	if t.aoc {
+		// Attempt to snapshot
+		errs.Push(t.snapshot())
+	}
 	// Close file back-end
 	errs.Push(t.mrT.Close())
 	return errs.Err()

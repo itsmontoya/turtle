@@ -143,6 +143,11 @@ func (s *Slave) SetVerbosity(v Verbosity) {
 	s.db.SetVerbosity(v)
 }
 
+// SetAoC will set the archive on close value
+func (s *Slave) SetAoC(aoc bool) {
+	s.db.SetAoC(aoc)
+}
+
 // Close will close the slave
 func (s *Slave) Close() (err error) {
 	if !s.closed.Set(true) {
