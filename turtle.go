@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/PathDNA/atoms"
+
 	"github.com/missionMeteora/journaler"
 
 	"github.com/itsmontoya/middleware"
@@ -76,6 +78,8 @@ type Turtle struct {
 	v Verbosity
 	// Archive on close
 	aoc bool
+	// Updated state
+	updated atoms.Bool
 	// Closed state
 	closed uint32
 }
@@ -161,6 +165,10 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 	// Defer release of read-lock
 	defer t.mux.RUnlock()
 
+	if !t.updated.Get() {
+		return
+	}
+
 	errs.Push(t.mrT.Archive(func(txn *mrT.Txn) error {
 		return t.forEachMemory(func(bktKey, refKey string, val []byte) (err error) {
 			// Put the updated bytes to the back-end
@@ -171,6 +179,8 @@ func (t *Turtle) snapshot() (errs *errors.ErrorList) {
 		})
 	}))
 
+	// Set updated to false
+	t.updated.Set(false)
 	return
 }
 
@@ -298,6 +308,8 @@ func (t *Turtle) Update(fn TxnFn) (err error) {
 	}
 	// Merge changes
 	txn.merge()
+	// Set updated to true
+	t.updated.Set(true)
 	return
 }
 
