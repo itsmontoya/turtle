@@ -53,9 +53,7 @@ func New(name, path string, fm FuncsMap, mws ...middleware.Middleware) (tp *Turt
 	// Make buckets map
 	t.b = newBuckets()
 	// Init buckets
-	if err = t.initBuckets(); err != nil {
-		return
-	}
+	t.initBuckets()
 	// Load values from disk
 	if err = t.load(); err != nil {
 		return
@@ -88,18 +86,14 @@ type Turtle struct {
 	closed uint32
 }
 
-func (t *Turtle) initBuckets() (err error) {
+func (t *Turtle) initBuckets() {
 	for key := range t.fm {
 		if key == "default" {
 			continue
 		}
 
-		if _, err = t.b.Create(key); err != nil {
-			return
-		}
+		t.b.create(key)
 	}
-
-	return
 }
 
 // isClosed will atomically check the closed state of the database
