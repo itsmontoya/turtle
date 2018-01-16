@@ -58,6 +58,9 @@ type Slave struct {
 	fn ImportFn
 	// Last transaction id
 	lastTxn atoms.String
+
+	onImport func()
+
 	// Closed state
 	closed atoms.Bool
 }
@@ -70,6 +73,10 @@ func (s *Slave) loop(importInterval int) {
 		switch err {
 		case nil:
 			s.db.logSuccess("Imported successfully to %v", s.lastTxn.Load())
+			if s.onImport != nil {
+				s.onImport()
+			}
+
 		case importers.ErrNoContent, ErrNoTxn:
 			s.db.logNotification("Import attempted, no new transactions available")
 		default:
@@ -146,6 +153,13 @@ func (s *Slave) SetVerbosity(v Verbosity) {
 // SetAoC will set the archive on close value
 func (s *Slave) SetAoC(aoc bool) {
 	s.db.SetAoC(aoc)
+}
+
+// SetOnImport will set the onImport callback func
+// Note: This func is NOT thread-safe. Please only call this on initialization
+// and before any processes have begun using the database
+func (s *Slave) SetOnImport(fn func()) {
+	s.onImport = fn
 }
 
 // Close will close the slave
