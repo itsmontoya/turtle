@@ -59,7 +59,8 @@ type Slave struct {
 	// Last transaction id
 	lastTxn atoms.String
 
-	onImport func()
+	oi onImport
+	// vey
 
 	// Closed state
 	closed atoms.Bool
@@ -73,8 +74,8 @@ func (s *Slave) loop(importInterval int) {
 		switch err {
 		case nil:
 			s.db.logSuccess("Imported successfully to %v", s.lastTxn.Load())
-			if s.onImport != nil {
-				s.onImport()
+			if fn := s.oi.Get(); fn != nil {
+				fn()
 			}
 
 		case importers.ErrNoContent, ErrNoTxn:
@@ -156,10 +157,8 @@ func (s *Slave) SetAoC(aoc bool) {
 }
 
 // SetOnImport will set the onImport callback func
-// Note: This func is NOT thread-safe. Please only call this on initialization
-// and before any processes have begun using the database
 func (s *Slave) SetOnImport(fn func()) {
-	s.onImport = fn
+	s.oi.Put(fn)
 }
 
 // Close will close the slave
