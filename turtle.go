@@ -89,9 +89,6 @@ type Turtle struct {
 }
 
 func (t *Turtle) initBuckets() (err error) {
-	t.mux.Lock()
-	defer t.mux.Unlock()
-
 	for key := range t.fm {
 		if key == "default" {
 			continue
