@@ -2,6 +2,7 @@ package turtleDB
 
 import (
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/PathDNA/turtleDB/importers"
@@ -59,7 +60,7 @@ type Slave struct {
 	// Last transaction id
 	lastTxn atoms.String
 
-	oi onImport
+	onImport atomic.Value
 	// vey
 
 	// Closed state
@@ -74,9 +75,7 @@ func (s *Slave) loop(importInterval int) {
 		switch err {
 		case nil:
 			s.db.logSuccess("Imported successfully to %v", s.lastTxn.Load())
-			if fn := s.oi.Get(); fn != nil {
-				fn()
-			}
+			s.callOnUpdate()
 
 		case importers.ErrNoContent, ErrNoTxn:
 			s.db.logNotification("Import attempted, no new transactions available")
@@ -158,7 +157,16 @@ func (s *Slave) SetAoC(aoc bool) {
 
 // SetOnImport will set the onImport callback func
 func (s *Slave) SetOnImport(fn func()) {
-	s.oi.Put(fn)
+	s.onImport.Store(fn)
+}
+
+func (s *Slave) callOnUpdate() {
+	fn, ok := s.onImport.Load().(func())
+	if !ok {
+		return
+	}
+
+	fn()
 }
 
 // Close will close the slave
