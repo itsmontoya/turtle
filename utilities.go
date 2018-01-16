@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/PathDNA/atoms"
 	"github.com/itsmontoya/mrT"
 	"github.com/missionMeteora/toolkit/errors"
 )
@@ -161,22 +160,3 @@ func UnmarshalJSON(b []byte) (val Value, err error) {
 }
 
 var jsonFM = NewFuncsMap(MarshalJSON, UnmarshalJSON)
-
-type onImport struct {
-	mux atoms.RWMux
-	fn  func()
-}
-
-func (o *onImport) Get() (fn func()) {
-	o.mux.Read(func() {
-		fn = o.fn
-	})
-
-	return
-}
-
-func (o *onImport) Put(fn func()) {
-	o.mux.Update(func() {
-		o.fn = fn
-	})
-}
