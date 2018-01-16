@@ -75,7 +75,7 @@ func (s *Slave) loop(importInterval int) {
 		switch err {
 		case nil:
 			s.db.logSuccess("Imported successfully to %v", s.lastTxn.Load())
-			s.callOnUpdate()
+			s.callOnImport()
 
 		case importers.ErrNoContent, ErrNoTxn:
 			s.db.logNotification("Import attempted, no new transactions available")
@@ -160,7 +160,7 @@ func (s *Slave) SetOnImport(fn func()) {
 	s.onImport.Store(fn)
 }
 
-func (s *Slave) callOnUpdate() {
+func (s *Slave) callOnImport() {
 	fn, ok := s.onImport.Load().(func())
 	if !ok {
 		return
