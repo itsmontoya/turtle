@@ -332,6 +332,11 @@ func (t *Turtle) ForEachTxn(txnID string, archive bool, fn mrT.ForEachFn) (err e
 	return t.mrT.ForEach(txnID, archive, fn)
 }
 
+// LastTxn will return the last transaction which has been flushed to disk
+func (t *Turtle) LastTxn() (txnID string, err error) {
+	return t.mrT.LastTxn()
+}
+
 // SetVerbosity will set the verbosity level for Turtle
 func (t *Turtle) SetVerbosity(v Verbosity) {
 	t.mux.Lock()
