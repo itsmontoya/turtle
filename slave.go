@@ -169,6 +169,9 @@ func (s *Slave) callOnImport() {
 	fn()
 }
 
+// Name returns the turtle's name
+func (s *Slave) Name() string { return s.db.Name() }
+
 // Close will close the slave
 func (s *Slave) Close() (err error) {
 	if !s.closed.Set(true) {

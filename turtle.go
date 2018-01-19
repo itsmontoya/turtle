@@ -39,6 +39,7 @@ func New(name, path string, fm FuncsMap, mws ...middleware.Middleware) (tp *Turt
 	var t Turtle
 	t.out = journaler.New("TurtleDB", name)
 	t.v = DefaultVerbosity
+	t.name = name
 
 	mws = append(mws, middleware.Base64MW{})
 	if t.mrT, err = mrT.New(path, name, mws...); err != nil {
@@ -82,6 +83,8 @@ type Turtle struct {
 	aoc bool
 	// Updated state
 	updated atoms.Bool
+	// Name
+	name string
 	// Closed state
 	closed uint32
 }
@@ -350,6 +353,9 @@ func (t *Turtle) SetAoC(aoc bool) {
 	t.aoc = aoc
 	t.mux.Unlock()
 }
+
+// Name returns the turtle's name
+func (t *Turtle) Name() string { return t.name }
 
 // Close will close Turtle
 func (t *Turtle) Close() (err error) {
