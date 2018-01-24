@@ -30,6 +30,7 @@ type action struct {
 
 // DB is a basic database type
 type DB interface {
+	Name() string
 	Read(TxnFn) error
 	Update(TxnFn) error
 	Import(r io.Reader) (txnID string, err error)
