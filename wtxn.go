@@ -1,35 +1,42 @@
-package turtle
+package turtleDB
 
 import "github.com/itsmontoya/mrT"
 
-// WTxn is a write transaction
-type WTxn struct {
-	// Original store
-	s store
-	// Transaction store
-	ts txnStore
-	// Marshal func
-	mfn MarshalFn
+// wTxn represents a write transactgion
+type wTxn struct {
+	b  *buckets
+	tb *txnBuckets
+	fm FuncsMap
 }
 
-func (w *WTxn) clear() {
+func (w *wTxn) clear() {
 	// Set store reference to nil
-	w.s = nil
+	w.b = nil
 	// Set transaction store reference to nil
-	w.ts = nil
+	w.tb = nil
+	// Set the funcs map to nil
+	w.fm = nil
 }
 
 // put is a QoL func to log a put action
-func (w *WTxn) put(txn *mrT.Txn, key string, value Value) (err error) {
+func (w *wTxn) put(txn *mrT.Txn, bktKey, refKey string, value Value) (err error) {
+	var fns *Funcs
+	if fns, err = w.fm.Get(bktKey); err != nil {
+		return
+	}
+
 	var b []byte
 	// Attempt to marshal value as bytes
-	if b, err = w.mfn(value); err != nil {
+	if b, err = fns.Marshal(value); err != nil {
 		// Marshal error encountered, return
 		return
 	}
 
+	// Get merged key
+	key := mergeKeys(bktKey, refKey)
+
 	// Log action to disk
-	if err = txn.Put([]byte(key), b); err != nil {
+	if err = txn.Put(key, b); err != nil {
 		return
 	}
 
@@ -37,23 +44,35 @@ func (w *WTxn) put(txn *mrT.Txn, key string, value Value) (err error) {
 }
 
 // delete is a QoL func to log a delete action
-func (w *WTxn) delete(txn *mrT.Txn, key string) error {
+func (w *wTxn) delete(txn *mrT.Txn, bktKey, refKey string) error {
+	// Get merged key
+	key := mergeKeys(bktKey, refKey)
+
 	// Log action to disk
-	return txn.Delete([]byte(key))
+	return txn.Delete(key)
 }
 
 // commit will log all actions to disk
-func (w *WTxn) commit(txn *mrT.Txn) (err error) {
-	for key, action := range w.ts {
-		// If action.put is true, put action
-		// Else, delete action
-		if action.put {
-			if err = w.put(txn, key, action.value); err != nil {
-				// Error encountered while logging put, return
-				return
+func (w *wTxn) commit(txn *mrT.Txn) (err error) {
+	for bktKey, bkt := range w.tb.m {
+		for refKey, a := range bkt.m {
+			// If action.put is true, put action
+			// Else, delete action
+			if a.put {
+				if err = w.put(txn, string(bktKey), string(refKey), a.value); err != nil {
+					// Error encountered while logging put, return
+					return
+				}
+			} else {
+				if err = w.delete(txn, string(bktKey), string(refKey)); err != nil {
+					// Error encountered while logging delete, return
+					return
+				}
 			}
-		} else {
-			if err = w.delete(txn, key); err != nil {
+		}
+
+		if bkt.deleted {
+			if err = w.delete(txn, string(bktKey), ""); err != nil {
 				// Error encountered while logging delete, return
 				return
 			}
@@ -64,85 +83,42 @@ func (w *WTxn) commit(txn *mrT.Txn) (err error) {
 }
 
 // merge will merge the transaction store values with the store values
-func (w *WTxn) merge() {
-	// Iterate through all transaction store actions
-	for key, action := range w.ts {
-		if action.put {
-			// Put action, update value for key
-			w.s[key] = action.value
-		} else {
-			// Delete action, remove key
-			delete(w.s, key)
-		}
-	}
-}
-
-// Get will get a value for a provided key
-func (w *WTxn) Get(key string) (value Value, err error) {
-	var ok bool
-	// Attempt to get from transaction store first
-	if value, ok, err = w.ts.get(key); ok || err != nil {
-		// We've encountered two situations:
-		//	1. We've found the value (ok is true)
-		//	2. The value has been deleted during this transaction (err == ErrKeyDoesNotExist)
-		return
-	}
-
-	// Return results from get called directly on store
-	return w.s.get(key)
-}
-
-// Put will put a value for a provided key
-func (w *WTxn) Put(key string, value Value) (err error) {
-	w.ts[key] = &action{
-		put:   true,
-		value: value,
-	}
-
-	return
-}
-
-// Delete will delete a key
-func (w *WTxn) Delete(key string) (err error) {
-	if !w.s.exists(key) && !w.ts.exists(key) {
-		// This key does not exist within the store nor the transaction
-		// TODO: Add a better deletion use-case for transaction-only finds
-		return
-	}
-
-	// No value is needed as this is a delete action
-	w.ts[key] = &action{
-		put: false,
-	}
-	return
-}
-
-// ForEach will iterate through all current items
-func (w *WTxn) ForEach(fn ForEachFn) (err error) {
-	var ok bool
-	for key, action := range w.ts {
-		if !action.put {
-			// Action was not a PUT action, which means it was a delete action
+func (w *wTxn) merge() {
+	for bktKey, bkt := range w.tb.m {
+		if bkt.deleted {
+			// If the bucket was deleted, we don't have to do anything fancy. Just delete and move on
+			w.b.delete(bktKey)
 			continue
 		}
 
-		if fn(key, action.value) {
-			// End was called, return early
-			return
+		bb := w.b.create(bktKey)
+
+		for refKey, a := range bkt.m {
+			if a.put {
+				bb.put(refKey, a.value)
+				continue
+			}
+
+			bb.delete(refKey)
 		}
 	}
+}
 
-	for key, value := range w.s {
-		if _, ok = w.ts[key]; ok {
-			// This key already exists within our transaction map, we can continue on
-			continue
-		}
+// Get will get a bucket
+func (w *wTxn) Get(key string) (b Bucket, err error) {
+	return w.tb.Get(key)
+}
 
-		if fn(key, value) {
-			// End was called, return early
-			return
-		}
-	}
+// Create will create a bucket
+func (w *wTxn) Create(key string) (b Bucket, err error) {
+	return w.tb.Create(key)
+}
 
-	return
+func (w *wTxn) Delete(key string) (err error) {
+	return w.tb.Delete(key)
+}
+
+// ForEach will iterate through all buckets
+func (w *wTxn) ForEach(fn ForEachBucketFn) error {
+	return w.tb.ForEach(fn)
 }
