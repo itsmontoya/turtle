@@ -4,6 +4,7 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/PathDNA/atoms"
 
@@ -247,6 +248,22 @@ func (t *Turtle) logNotification(fmt string, vals ...interface{}) {
 	}
 
 	t.out.Notification(fmt, vals...)
+}
+
+// SetSnapshotInterval will set snapshot intervals for the db
+func (t *Turtle) SetSnapshotInterval(seconds int) {
+	secs := time.Duration(seconds) * time.Second
+
+	for {
+		time.Sleep(secs)
+		if t.isClosed() {
+			return
+		}
+
+		if err := t.snapshot(); err != nil {
+			t.out.Error("Error snapshotting: %v", err)
+		}
+	}
 }
 
 // Export will stream an export
